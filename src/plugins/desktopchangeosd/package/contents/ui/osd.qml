@@ -339,7 +339,7 @@ PlasmaCore.Window {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     ctx.lineWidth = 2;
-                    ctx.strokeStyle = Kirigami.Theme.textColor;
+                    ctx.strokeStyle = Kirigami.Theme.backgroundColor.hslLightness > 0.5 ? "#555555" : Kirigami.Theme.textColor;
                     ctx.globalAlpha = 0.68;
 
                     for (let i = 0; i < topologyGraph.graphEdges.length; ++i) {
