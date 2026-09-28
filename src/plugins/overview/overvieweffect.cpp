@@ -7,6 +7,8 @@
 #include "overvieweffect.h"
 #include "effect/effecthandler.h"
 #include "overviewconfig.h"
+#include "virtualdesktops.h"
+#include "topos/toposmanager.h"
 
 #include <KGlobalAccel>
 #include <KLocalizedString>
@@ -277,6 +279,11 @@ bool OverviewEffect::ignoreMinimized() const
 bool OverviewEffect::organizedGrid() const
 {
     return OverviewConfig::organizedGrid();
+}
+
+QObject *OverviewEffect::topos() const
+{
+    return VirtualDesktopManager::self()->topos();
 }
 
 int OverviewEffect::requestedEffectChainPosition() const

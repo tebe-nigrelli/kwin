@@ -33,6 +33,7 @@
 #include "scripting/scripting.h"
 #include "useractions.h"
 #include "virtualdesktops.h"
+#include "topos/toposmanager.h"
 #include "window.h"
 #include "workspace.h"
 #if KWIN_BUILD_X11
@@ -59,6 +60,8 @@
 #include <QRegularExpression>
 #include <kauthorized.h>
 #include <kconfig.h>
+
+#include <optional>
 
 #include "killwindow.h"
 #if KWIN_BUILD_TABBOX
@@ -1425,6 +1428,20 @@ void Workspace::slotToggleShowDesktop()
     setShowingDesktop(!showingDesktop());
 }
 
+static std::optional<ToposPort> toposPortForDirection(VirtualDesktopManager::Direction direction)
+{
+    switch (direction) {
+    case VirtualDesktopManager::Direction::Up: return ToposPort::North;
+    case VirtualDesktopManager::Direction::Right: return ToposPort::East;
+    case VirtualDesktopManager::Direction::Down: return ToposPort::South;
+    case VirtualDesktopManager::Direction::Left: return ToposPort::West;
+    case VirtualDesktopManager::Direction::Next:
+    case VirtualDesktopManager::Direction::Previous:
+        return std::nullopt;
+    }
+    Q_UNREACHABLE();
+}
+
 void windowToDesktop(Window *window, VirtualDesktopManager::Direction direction)
 {
     if (window->isDesktop() || window->isDock()) {
@@ -1434,13 +1451,23 @@ void windowToDesktop(Window *window, VirtualDesktopManager::Direction direction)
     VirtualDesktopManager *vds = VirtualDesktopManager::self();
     Workspace *ws = Workspace::self();
     // TODO: why is options->isRollOverDesktops() not honored?
-    const auto desktop = vds->inDirection(vds->currentDesktop(window->output()), direction, true);
+    VirtualDesktop *current = vds->currentDesktop(window->output());
+    const auto desktop = vds->inDirection(current, direction, true);
+    const auto armToposTransition = [&]() {
+        if (desktop != current) {
+            if (const auto port = toposPortForDirection(direction)) {
+                vds->topos()->armTransition(current, *port, window->output());
+            }
+        }
+    };
     if (ws->moveResizeWindow()) {
         if (ws->moveResizeWindow() == window) {
+            armToposTransition();
             vds->setCurrent(desktop, window->output());
         }
     } else {
         ws->setMoveResizeWindow(window);
+        armToposTransition();
         vds->setCurrent(desktop, window->output());
         ws->setMoveResizeWindow(nullptr);
     }
@@ -1485,12 +1512,19 @@ void activeWindowToDesktop(VirtualDesktopManager::Direction direction)
     if (newCurrent == current) {
         return;
     }
+    const auto armToposTransition = [&]() {
+        if (const auto port = toposPortForDirection(direction)) {
+            vds->topos()->armTransition(current, *port, ws->activeWindow()->output());
+        }
+    };
     if (ws->moveResizeWindow()) {
         if (ws->moveResizeWindow() == ws->activeWindow()) {
+            armToposTransition();
             vds->setCurrent(newCurrent, ws->activeWindow()->output());
         }
     } else {
         ws->setMoveResizeWindow(ws->activeWindow());
+        armToposTransition();
         vds->setCurrent(newCurrent, ws->activeWindow()->output());
         ws->setMoveResizeWindow(nullptr);
     }

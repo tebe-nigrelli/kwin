@@ -29,6 +29,7 @@ class OverviewEffect : public QuickSceneEffect
     Q_PROPERTY(qreal gridPartialActivationFactor READ gridPartialActivationFactor NOTIFY gridPartialActivationFactorChanged)
     Q_PROPERTY(bool gridGestureInProgress READ gridGestureInProgress NOTIFY gridGestureInProgressChanged)
     Q_PROPERTY(QString searchText MEMBER m_searchText NOTIFY searchTextChanged)
+    Q_PROPERTY(QObject *topos READ topos CONSTANT)
 
 public:
     OverviewEffect();
@@ -51,6 +52,7 @@ public:
     bool gridGestureInProgress() const;
     QPointF desktopOffset() const;
     Q_INVOKABLE QPointF desktopOffsetForScreen(LogicalOutput *screen) const;
+    QObject *topos() const;
 
     int requestedEffectChainPosition() const override;
     bool borderActivated(ElectricBorder border) override;

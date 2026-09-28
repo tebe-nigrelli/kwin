@@ -13,6 +13,7 @@
 #endif
 #include "core/output.h"
 #include "input.h"
+#include "topos/toposmanager.h"
 #include "wayland/plasmavirtualdesktop.h"
 #include "workspace.h"
 // KDE
@@ -30,6 +31,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <optional>
 
 namespace KWin
 {
@@ -242,12 +244,18 @@ VirtualDesktopManager::VirtualDesktopManager(QObject *parent)
 #endif
     , m_swipeGestureReleasedY(new QAction(this))
     , m_swipeGestureReleasedX(new QAction(this))
+    , m_topos(std::make_unique<ToposManager>(this))
 {
 }
 
 VirtualDesktopManager::~VirtualDesktopManager()
 {
     s_manager = nullptr;
+}
+
+ToposManager *VirtualDesktopManager::topos() const
+{
+    return m_topos.get();
 }
 
 void VirtualDesktopManager::setRootInfo(NETRootInfo *info)
@@ -292,7 +300,100 @@ uint VirtualDesktopManager::inDirection(uint desktop, Direction direction, bool 
 
 void VirtualDesktopManager::moveTo(Direction direction, bool wrap)
 {
-    setCurrent(inDirection(nullptr, direction, wrap));
+    VirtualDesktop *source = currentDesktop();
+    VirtualDesktop *target = inDirection(source, direction, wrap);
+    if (m_topos && m_topos->isReady() && target != source) {
+        std::optional<ToposPort> port;
+        switch (direction) {
+        case Direction::Up: port = ToposPort::North; break;
+        case Direction::Right: port = ToposPort::East; break;
+        case Direction::Down: port = ToposPort::South; break;
+        case Direction::Left: port = ToposPort::West; break;
+        case Direction::Next:
+        case Direction::Previous:
+            break;
+        }
+        if (port) {
+            if (m_perOutputVirtualDesktops) {
+                m_topos->armTransition(source, *port, workspace()->activeOutput());
+            } else {
+                for (LogicalOutput *output : workspace()->outputs()) {
+                    m_topos->armTransition(source, *port, output);
+                }
+            }
+        }
+    }
+    setCurrent(target);
+}
+
+VirtualDesktop *VirtualDesktopManager::basisNeighbor(VirtualDesktop *desktop, Direction direction, bool wrap) const
+{
+    if (!desktop) {
+        desktop = currentDesktop();
+    }
+    if (!desktop) {
+        return nullptr;
+    }
+
+    if (direction == Direction::Next) {
+        return next(desktop, wrap);
+    }
+    if (direction == Direction::Previous) {
+        return previous(desktop, wrap);
+    }
+
+    QPoint coords = m_grid.gridCoords(desktop);
+    Q_ASSERT(coords.x() >= 0);
+    while (true) {
+        switch (direction) {
+        case Direction::Up:
+            coords.ry()--;
+            if (coords.y() < 0) {
+                if (wrap) {
+                    coords.setY(m_grid.height() - 1);
+                } else {
+                    return desktop;
+                }
+            }
+            break;
+        case Direction::Down:
+            coords.ry()++;
+            if (coords.y() >= m_grid.height()) {
+                if (wrap) {
+                    coords.setY(0);
+                } else {
+                    return desktop;
+                }
+            }
+            break;
+        case Direction::Right:
+            coords.rx()++;
+            if (coords.x() >= m_grid.width()) {
+                if (wrap) {
+                    coords.setX(0);
+                } else {
+                    return desktop;
+                }
+            }
+            break;
+        case Direction::Left:
+            coords.rx()--;
+            if (coords.x() < 0) {
+                if (wrap) {
+                    coords.setX(m_grid.width() - 1);
+                } else {
+                    return desktop;
+                }
+            }
+            break;
+        case Direction::Next:
+        case Direction::Previous:
+            Q_UNREACHABLE();
+        }
+        if (VirtualDesktop *vd = m_grid.at(coords)) {
+            return vd;
+        }
+    }
 }
 
 VirtualDesktop *VirtualDesktopManager::above(VirtualDesktop *desktop, bool wrap) const
@@ -300,22 +401,10 @@ VirtualDesktop *VirtualDesktopManager::above(VirtualDesktop *desktop, bool wrap)
     if (!desktop) {
         desktop = currentDesktop();
     }
-    QPoint coords = m_grid.gridCoords(desktop);
-    Q_ASSERT(coords.x() >= 0);
-    while (true) {
-        coords.ry()--;
-        if (coords.y() < 0) {
-            if (wrap) {
-                coords.setY(m_grid.height() - 1);
-            } else {
-                return desktop; // Already at the top-most desktop
-            }
-        }
-        if (VirtualDesktop *vd = m_grid.at(coords)) {
-            return vd;
-        }
+    if (m_topos && m_topos->isReady()) {
+        return m_topos->neighbor(desktop, ToposPort::North, wrap);
     }
-    return nullptr;
+    return basisNeighbor(desktop, Direction::Up, wrap);
 }
 
 VirtualDesktop *VirtualDesktopManager::toRight(VirtualDesktop *desktop, bool wrap) const
@@ -323,22 +412,10 @@ VirtualDesktop *VirtualDesktopManager::toRight(VirtualDesktop *desktop, bool wra
     if (!desktop) {
         desktop = currentDesktop();
     }
-    QPoint coords = m_grid.gridCoords(desktop);
-    Q_ASSERT(coords.x() >= 0);
-    while (true) {
-        coords.rx()++;
-        if (coords.x() >= m_grid.width()) {
-            if (wrap) {
-                coords.setX(0);
-            } else {
-                return desktop; // Already at the right-most desktop
-            }
-        }
-        if (VirtualDesktop *vd = m_grid.at(coords)) {
-            return vd;
-        }
+    if (m_topos && m_topos->isReady()) {
+        return m_topos->neighbor(desktop, ToposPort::East, wrap);
     }
-    return nullptr;
+    return basisNeighbor(desktop, Direction::Right, wrap);
 }
 
 VirtualDesktop *VirtualDesktopManager::below(VirtualDesktop *desktop, bool wrap) const
@@ -346,23 +423,10 @@ VirtualDesktop *VirtualDesktopManager::below(VirtualDesktop *desktop, bool wrap)
     if (!desktop) {
         desktop = currentDesktop();
     }
-    QPoint coords = m_grid.gridCoords(desktop);
-    Q_ASSERT(coords.x() >= 0);
-    while (true) {
-        coords.ry()++;
-        if (coords.y() >= m_grid.height()) {
-            if (wrap) {
-                coords.setY(0);
-            } else {
-                // Already at the bottom-most desktop
-                return desktop;
-            }
-        }
-        if (VirtualDesktop *vd = m_grid.at(coords)) {
-            return vd;
-        }
+    if (m_topos && m_topos->isReady()) {
+        return m_topos->neighbor(desktop, ToposPort::South, wrap);
     }
-    return nullptr;
+    return basisNeighbor(desktop, Direction::Down, wrap);
 }
 
 VirtualDesktop *VirtualDesktopManager::toLeft(VirtualDesktop *desktop, bool wrap) const
@@ -370,22 +434,10 @@ VirtualDesktop *VirtualDesktopManager::toLeft(VirtualDesktop *desktop, bool wrap
     if (!desktop) {
         desktop = currentDesktop();
     }
-    QPoint coords = m_grid.gridCoords(desktop);
-    Q_ASSERT(coords.x() >= 0);
-    while (true) {
-        coords.rx()--;
-        if (coords.x() < 0) {
-            if (wrap) {
-                coords.setX(m_grid.width() - 1);
-            } else {
-                return desktop; // Already at the left-most desktop
-            }
-        }
-        if (VirtualDesktop *vd = m_grid.at(coords)) {
-            return vd;
-        }
+    if (m_topos && m_topos->isReady()) {
+        return m_topos->neighbor(desktop, ToposPort::West, wrap);
     }
-    return nullptr;
+    return basisNeighbor(desktop, Direction::Left, wrap);
 }
 
 VirtualDesktop *VirtualDesktopManager::next(VirtualDesktop *desktop, bool wrap) const
@@ -791,36 +843,73 @@ void VirtualDesktopManager::initShortcuts()
         }
     };
 
+    const auto rawDelta = [this](const QPointF &delta) {
+        if (!m_topos || !m_topos->isReady()) {
+            return;
+        }
+        if (m_perOutputVirtualDesktops) {
+            m_topos->updateTraversal(delta, workspace()->activeOutput());
+        } else {
+            for (LogicalOutput *output : workspace()->outputs()) {
+                m_topos->updateTraversal(delta, output);
+            }
+        }
+    };
+
     const auto left = [this, emitCurrentChanging](qreal cb) {
+        if (m_topos && m_topos->isReady()) {
+            return;
+        }
         if (grid().width() > 1) {
             m_currentDesktopOffset.setX(cb);
             emitCurrentChanging();
         }
     };
     const auto right = [this, emitCurrentChanging](qreal cb) {
+        if (m_topos && m_topos->isReady()) {
+            return;
+        }
         if (grid().width() > 1) {
             m_currentDesktopOffset.setX(-cb);
             emitCurrentChanging();
         }
     };
-    input()->registerTouchpadSwipeShortcut(SwipeDirection::Left, 3, m_swipeGestureReleasedX.get(), left);
-    input()->registerTouchpadSwipeShortcut(SwipeDirection::Right, 3, m_swipeGestureReleasedX.get(), right);
-    input()->registerTouchpadSwipeShortcut(SwipeDirection::Left, 4, m_swipeGestureReleasedX.get(), left);
-    input()->registerTouchpadSwipeShortcut(SwipeDirection::Right, 4, m_swipeGestureReleasedX.get(), right);
+    input()->registerTouchpadSwipeShortcut(SwipeDirection::Left, 3, m_swipeGestureReleasedX.get(), left, rawDelta);
+    input()->registerTouchpadSwipeShortcut(SwipeDirection::Right, 3, m_swipeGestureReleasedX.get(), right, rawDelta);
+    input()->registerTouchpadSwipeShortcut(SwipeDirection::Left, 4, m_swipeGestureReleasedX.get(), left, rawDelta);
+    input()->registerTouchpadSwipeShortcut(SwipeDirection::Right, 4, m_swipeGestureReleasedX.get(), right, rawDelta);
     input()->registerTouchpadSwipeShortcut(SwipeDirection::Down, 3, m_swipeGestureReleasedY.get(), [this, emitCurrentChanging](qreal cb) {
+        if (m_topos && m_topos->isReady()) {
+            return;
+        }
         if (grid().height() > 1) {
             m_currentDesktopOffset.setY(-cb);
             emitCurrentChanging();
         }
-    });
+    }, rawDelta);
     input()->registerTouchpadSwipeShortcut(SwipeDirection::Up, 3, m_swipeGestureReleasedY.get(), [this, emitCurrentChanging](qreal cb) {
+        if (m_topos && m_topos->isReady()) {
+            return;
+        }
         if (grid().height() > 1) {
             m_currentDesktopOffset.setY(cb);
             emitCurrentChanging();
         }
+    }, rawDelta);
+
+    // Touchscreen switching keeps KDE's existing one-desktop progress path.
+    input()->registerTouchscreenSwipeShortcut(SwipeDirection::Left, 3, m_swipeGestureReleasedX.get(), [this, emitCurrentChanging](qreal cb) {
+        if (grid().width() > 1) {
+            m_currentDesktopOffset.setX(cb);
+            emitCurrentChanging();
+        }
     });
-    input()->registerTouchscreenSwipeShortcut(SwipeDirection::Left, 3, m_swipeGestureReleasedX.get(), left);
-    input()->registerTouchscreenSwipeShortcut(SwipeDirection::Right, 3, m_swipeGestureReleasedX.get(), right);
+    input()->registerTouchscreenSwipeShortcut(SwipeDirection::Right, 3, m_swipeGestureReleasedX.get(), [this, emitCurrentChanging](qreal cb) {
+        if (grid().width() > 1) {
+            m_currentDesktopOffset.setX(-cb);
+            emitCurrentChanging();
+        }
+    });
 
     // axis events
     input()->registerAxisShortcut(Qt::MetaModifier | Qt::AltModifier, PointerAxisDown,
@@ -831,6 +920,25 @@ void VirtualDesktopManager::initShortcuts()
 
 void VirtualDesktopManager::gestureReleasedY()
 {
+    LogicalOutput *activeOutput = workspace()->activeOutput();
+    if (m_topos && m_topos->isReady() && m_topos->traversalVisualState(activeOutput).active) {
+        VirtualDesktop *current = currentDesktop(activeOutput);
+        VirtualDesktop *target = m_topos->finishTraversal(activeOutput);
+        if (!m_perOutputVirtualDesktops) {
+            for (LogicalOutput *output : workspace()->outputs()) {
+                if (output != activeOutput) {
+                    m_topos->finishTraversal(output);
+                }
+            }
+        }
+        if (target && target != current) {
+            setCurrent(target, m_perOutputVirtualDesktops ? activeOutput : nullptr);
+        } else {
+            Q_EMIT currentChangingCancelled();
+        }
+        m_currentDesktopOffset = QPointF(0, 0);
+        return;
+    }
     auto current = currentDesktop();
     // Note that if desktop wrapping is disabled and there's no desktop above or below,
     // above() and below() will return the current desktop.
@@ -852,6 +960,25 @@ void VirtualDesktopManager::gestureReleasedY()
 
 void VirtualDesktopManager::gestureReleasedX()
 {
+    LogicalOutput *activeOutput = workspace()->activeOutput();
+    if (m_topos && m_topos->isReady() && m_topos->traversalVisualState(activeOutput).active) {
+        VirtualDesktop *current = currentDesktop(activeOutput);
+        VirtualDesktop *target = m_topos->finishTraversal(activeOutput);
+        if (!m_perOutputVirtualDesktops) {
+            for (LogicalOutput *output : workspace()->outputs()) {
+                if (output != activeOutput) {
+                    m_topos->finishTraversal(output);
+                }
+            }
+        }
+        if (target && target != current) {
+            setCurrent(target, m_perOutputVirtualDesktops ? activeOutput : nullptr);
+        } else {
+            Q_EMIT currentChangingCancelled();
+        }
+        m_currentDesktopOffset = QPointF(0, 0);
+        return;
+    }
     // Note that if desktop wrapping is disabled and there's no desktop to left or right,
     // toLeft() and toRight() will return the current desktop.
     VirtualDesktop *current = currentDesktop();

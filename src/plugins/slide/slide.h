@@ -45,6 +45,8 @@ namespace KWin
  */
 
 class SlideEffect;
+struct ToposTraversalVisualState;
+struct ToposTransitionHint;
 
 class SlideEffectScreen
 {
@@ -63,6 +65,9 @@ public:
     void desktopChanged(VirtualDesktop *old, VirtualDesktop *current, EffectWindow *with);
     void desktopChanging(VirtualDesktop *old, QPointF desktopOffset, EffectWindow *with);
     void desktopChangingCancelled();
+    void toposTraversalChanged(const ToposTraversalVisualState &state);
+    void startToposAnimation(const ToposTransitionHint &hint);
+    bool isToposActive() const;
     void windowAdded(EffectWindow *w);
     void windowDeleted(EffectWindow *w);
     void finishedSwitching();
@@ -85,11 +90,14 @@ private:
         Inactive,
         ActiveAnimation,
         ActiveGesture,
+        ActiveToposAnimation,
+        ActiveToposGesture,
     };
 
     State m_state = State::Inactive;
     SpringMotion m_motionX;
     SpringMotion m_motionY;
+    SpringMotion m_toposMotion;
 
     // When the desktop isn't desktopChanging(), these two variables are used to control the animation path.
     // They use desktops as a unit.
@@ -97,6 +105,11 @@ private:
     QPointF m_endPos;
 
     QPointF m_gesturePos;
+
+    VirtualDesktop *m_toposFrom = nullptr;
+    VirtualDesktop *m_toposTo = nullptr;
+    QPointF m_toposDirection;
+    qreal m_toposProgress = 0;
 
     EffectWindow *m_movingWindow = nullptr;
     AnimationClock m_clock;

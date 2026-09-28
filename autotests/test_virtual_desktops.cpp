@@ -22,7 +22,7 @@ void InputRedirection::registerAxisShortcut(Qt::KeyboardModifiers modifiers, Poi
 {
 }
 
-void InputRedirection::registerTouchpadSwipeShortcut(SwipeDirection direction, uint32_t fingerCount, QAction *onUp, std::function<void(qreal)> progressCallback)
+void InputRedirection::registerTouchpadSwipeShortcut(SwipeDirection direction, uint32_t fingerCount, QAction *onUp, std::function<void(qreal)> progressCallback, std::function<void(const QPointF &)> deltaCallback)
 {
 }
 

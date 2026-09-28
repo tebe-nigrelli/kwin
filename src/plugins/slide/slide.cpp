@@ -14,6 +14,8 @@
 #include "core/output.h"
 #include "core/renderviewport.h"
 #include "effect/effecthandler.h"
+#include "topos/toposmanager.h"
+#include "virtualdesktops.h"
 
 // KConfigSkeleton
 #include "slideconfig.h"
@@ -61,6 +63,26 @@ SlideEffect::SlideEffect()
     connect(effects, &EffectsHandler::currentActivityChanged, this, [this]() {
         m_switchingActivity = false;
     });
+
+    connect(VirtualDesktopManager::self()->topos(), &ToposManager::traversalChanged, this, [this](LogicalOutput *output) {
+        if (m_switchingActivity || (effects->hasActiveFullScreenEffect() && effects->activeFullScreenEffect() != this)) {
+            return;
+        }
+        const ToposTraversalVisualState state = VirtualDesktopManager::self()->topos()->traversalVisualState(output);
+        if (!state.active) {
+            return;
+        }
+        if (!isActive()) {
+            const QList<EffectWindow *> windows = effects->stackingOrder();
+            for (EffectWindow *w : windows) {
+                w->setData(WindowForceBackgroundContrastRole, QVariant(true));
+                w->setData(WindowForceBlurRole, QVariant(true));
+            }
+        }
+        auto slideScreenResult = m_slideEffectScreens.tryEmplace(output, this, output);
+        slideScreenResult.iterator->toposTraversalChanged(state);
+        effects->setActiveFullScreenEffect(this);
+    });
 }
 
 SlideEffect::~SlideEffect()
@@ -98,6 +120,8 @@ void SlideEffectScreen::reconfigure()
 
     m_motionX = SpringMotion(springConstant, dampingRatio);
     m_motionY = SpringMotion(springConstant, dampingRatio);
+    m_toposMotion = SpringMotion(springConstant, dampingRatio);
+    m_toposMotion.setEpsilon(0.001);
 }
 
 inline Region buildClipRegion(const QPoint &pos, int w, int h)
@@ -156,13 +180,33 @@ void SlideEffectScreen::prePaintScreen(ScreenPrePaintData &data)
     case State::ActiveGesture:
         m_paintCtx.position = m_gesturePos;
         break;
+    case State::ActiveToposAnimation: {
+        const std::chrono::milliseconds timeDelta = m_clock.tick(data.view);
+        m_toposMotion.advance(timeDelta);
+        m_toposProgress = m_toposMotion.position();
+        break;
+    }
+    case State::ActiveToposGesture:
+        break;
     }
 
-    // Clipping
     m_paintCtx.visibleDesktops.clear();
+    if (m_state == State::ActiveToposAnimation || m_state == State::ActiveToposGesture) {
+        if (m_toposFrom) {
+            m_paintCtx.visibleDesktops << m_toposFrom;
+        }
+        if (m_toposTo && m_toposTo != m_toposFrom) {
+            m_paintCtx.visibleDesktops << m_toposTo;
+        }
+        data.mask |= Effect::PAINT_SCREEN_TRANSFORMED;
+        return;
+    }
+
+    // Clipping for the ordinary KDE grid path.
     m_paintCtx.visibleDesktops.reserve(4); // 4 - maximum number of visible desktops
-    bool includedX = false, includedY = false;
     for (VirtualDesktop *desktop : desktops) {
+        bool includedX = false;
+        bool includedY = false;
         const QPoint coords = effects->desktopGridCoords(desktop);
         if (coords.x() % w == (int)(m_paintCtx.position.x()) % w) {
             includedX = true;
@@ -272,6 +316,29 @@ void SlideEffectScreen::paintWindow(const RenderTarget &renderTarget, const Rend
         return;
     }
 
+    if (m_state == State::ActiveToposGesture || m_state == State::ActiveToposAnimation) {
+        const auto screens = effects->screens();
+        auto paintCopy = [&](const QPointF &translation) {
+            for (LogicalOutput *screen : screens) {
+                const QPoint drawTranslation = getDrawCoords(translation, screen);
+                data += drawTranslation;
+                const Rect screenArea = screen->geometry();
+                const Rect logicalDamage = screenArea.translated(drawTranslation).intersected(screenArea);
+                effects->paintWindow(renderTarget, viewport, w, mask,
+                                     deviceGeometry.intersected(viewport.mapToDeviceCoordinatesAligned(logicalDamage)), data);
+                data += QPoint(-drawTranslation.x(), -drawTranslation.y());
+            }
+        };
+
+        if (m_toposFrom && w->isOnDesktop(m_toposFrom)) {
+            paintCopy(-m_toposDirection * m_toposProgress);
+        }
+        if (m_toposTo && w->isOnDesktop(m_toposTo)) {
+            paintCopy(m_toposDirection * (1.0 - m_toposProgress));
+        }
+        return;
+    }
+
     const int gridWidth = effects->desktopGridWidth();
     const int gridHeight = effects->desktopGridHeight();
 
@@ -337,6 +404,8 @@ void SlideEffectScreen::postPaintScreen()
 {
     if (m_state == State::ActiveAnimation && !m_motionX.isMoving() && !m_motionY.isMoving()) {
         finishedSwitching();
+    } else if (m_state == State::ActiveToposAnimation && !m_toposMotion.isMoving()) {
+        finishedSwitching();
     }
 }
 
@@ -367,6 +436,43 @@ bool SlideEffectScreen::shouldElevate(const EffectWindow *w) const
  * Called AFTER the gesture is released.
  * Sets up animation to round off to the new current desktop.
  */
+void SlideEffectScreen::toposTraversalChanged(const ToposTraversalVisualState &state)
+{
+    if (m_state == State::Inactive) {
+        prepareSwitching();
+    }
+    m_state = State::ActiveToposGesture;
+    m_movingWindow = nullptr;
+    m_toposFrom = state.source;
+    m_toposTo = state.target;
+    m_toposDirection = portVector(state.port);
+    m_toposProgress = state.progress;
+    effects->addRepaint(m_screen->geometry());
+}
+
+void SlideEffectScreen::startToposAnimation(const ToposTransitionHint &hint)
+{
+    if (m_state == State::Inactive) {
+        prepareSwitching();
+    }
+    m_state = State::ActiveToposAnimation;
+    m_movingWindow = nullptr;
+    m_toposFrom = hint.from;
+    m_toposTo = hint.to;
+    m_toposDirection = portVector(hint.port);
+    m_toposProgress = hint.startProgress;
+    m_toposMotion.setPosition(hint.startProgress);
+    m_toposMotion.setAnchor(hint.endProgress);
+    m_toposMotion.setVelocity(0);
+    m_clock.reset();
+    effects->addRepaint(m_screen->geometry());
+}
+
+bool SlideEffectScreen::isToposActive() const
+{
+    return m_state == State::ActiveToposGesture || m_state == State::ActiveToposAnimation;
+}
+
 void SlideEffectScreen::startAnimation(const QPointF &oldPos, VirtualDesktop *current, EffectWindow *movingWindow)
 {
     if (m_state == State::Inactive) {
@@ -439,6 +545,10 @@ void SlideEffectScreen::finishedSwitching()
 
     m_windowData.clear();
     m_movingWindow = nullptr;
+    m_toposFrom = nullptr;
+    m_toposTo = nullptr;
+    m_toposDirection = QPointF();
+    m_toposProgress = 0;
     m_state = State::Inactive;
 }
 
@@ -456,6 +566,15 @@ void SlideEffect::desktopChanged(VirtualDesktop *old, VirtualDesktop *current, E
     }
 
     auto slideScreenResult = m_slideEffectScreens.tryEmplace(screen, this, screen);
+    if (const auto hint = VirtualDesktopManager::self()->topos()->takeTransitionHint(screen)) {
+        slideScreenResult.iterator->startToposAnimation(*hint);
+        effects->setActiveFullScreenEffect(this);
+        return;
+    }
+    if (slideScreenResult.iterator->isToposActive()) {
+        slideScreenResult.iterator->finishedSwitching();
+        return;
+    }
     slideScreenResult.iterator->desktopChanged(old, current, with);
     effects->setActiveFullScreenEffect(this);
 }
@@ -477,6 +596,10 @@ void SlideEffectScreen::desktopChanged(VirtualDesktop *old, VirtualDesktop *curr
     case State::ActiveGesture:
         previousPos = m_gesturePos;
         break;
+    case State::ActiveToposAnimation:
+    case State::ActiveToposGesture:
+        finishedSwitching();
+        return;
     }
 
     startAnimation(previousPos, current, with);
@@ -525,18 +648,23 @@ void SlideEffectScreen::desktopChanging(VirtualDesktop *old, QPointF desktopOffs
 
 void SlideEffect::desktopChangingCancelled()
 {
-    // If the fingers have been lifted and the current desktop didn't change, start animation
-    // to move back to the original virtual desktop.
-    if (effects->activeFullScreenEffect() == this) {
-        for (SlideEffectScreen &slideScreen : m_slideEffectScreens) {
-            slideScreen.desktopChangingCancelled();
+    if (effects->activeFullScreenEffect() != this) {
+        return;
+    }
+    for (auto it = m_slideEffectScreens.begin(); it != m_slideEffectScreens.end(); ++it) {
+        if (const auto hint = VirtualDesktopManager::self()->topos()->takeTransitionHint(it.key())) {
+            it->startToposAnimation(*hint);
+        } else {
+            it->desktopChangingCancelled();
         }
     }
 }
 
 void SlideEffectScreen::desktopChangingCancelled()
 {
-    if (m_state != State::Inactive) {
+    if (m_state == State::ActiveToposGesture || m_state == State::ActiveToposAnimation) {
+        finishedSwitching();
+    } else if (m_state != State::Inactive) {
         startAnimation(m_gesturePos, effects->currentDesktop(m_screen), nullptr);
     }
 }

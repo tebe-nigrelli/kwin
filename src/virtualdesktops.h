@@ -29,6 +29,7 @@ namespace KWin
 {
 
 class LogicalOutput;
+class ToposManager;
 class Options;
 class PlasmaVirtualDesktopManagementInterface;
 
@@ -256,6 +257,8 @@ public:
      */
     const VirtualDesktopGrid &grid() const;
 
+    ToposManager *topos() const;
+
     enum class Direction {
         Up,
         Down,
@@ -264,6 +267,8 @@ public:
         Next,
         Previous,
     };
+    /** Returns a neighbor using only the native KDE grid, bypassing Topos. */
+    VirtualDesktop *basisNeighbor(VirtualDesktop *desktop, Direction direction, bool wrap = true) const;
     VirtualDesktop *inDirection(VirtualDesktop *desktop, Direction direction, bool wrap = true);
     uint inDirection(uint desktop, Direction direction, bool wrap = true);
     void moveTo(Direction direction, bool wrap = true);
@@ -602,6 +607,7 @@ private:
     std::unique_ptr<QAction> m_swipeGestureReleasedY;
     std::unique_ptr<QAction> m_swipeGestureReleasedX;
     QPointF m_currentDesktopOffset = QPointF(0, 0);
+    std::unique_ptr<ToposManager> m_topos;
 
     KWIN_SINGLETON_VARIABLE(VirtualDesktopManager, s_manager)
 };

@@ -29,6 +29,7 @@
 #include "screenedgegestures.h"
 #include "utils/common.h"
 #include "virtualdesktops.h"
+#include "topos/toposmanager.h"
 #include "wayland/seat.h"
 #include "wayland_server.h"
 #include "window.h"
@@ -43,6 +44,7 @@
 #include <QAbstractEventDispatcher>
 #include <QAction>
 #include <QDBusInterface>
+#include <optional>
 #include <span>
 
 using namespace std::chrono_literals;
@@ -474,18 +476,24 @@ void Edge::switchDesktop(const QPoint &cursorPos)
     VirtualDesktopManager *vds = VirtualDesktopManager::self();
     VirtualDesktop *oldDesktop = vds->currentDesktop(m_output);
     VirtualDesktop *desktop = oldDesktop;
+    std::optional<ToposPort> transitionPort;
+    int transitionSteps = 0;
     const int OFFSET = 2;
     if (isLeft()) {
         const VirtualDesktop *interimDesktop = desktop;
         desktop = vds->toLeft(desktop, vds->isNavigationWrappingAround());
         if (desktop != interimDesktop) {
             pos.setX(workspace()->geometry().width() - 1 - OFFSET);
+            transitionPort = ToposPort::West;
+            ++transitionSteps;
         }
     } else if (isRight()) {
         const VirtualDesktop *interimDesktop = desktop;
         desktop = vds->toRight(desktop, vds->isNavigationWrappingAround());
         if (desktop != interimDesktop) {
             pos.setX(OFFSET);
+            transitionPort = ToposPort::East;
+            ++transitionSteps;
         }
     }
     if (isTop()) {
@@ -493,12 +501,16 @@ void Edge::switchDesktop(const QPoint &cursorPos)
         desktop = vds->above(desktop, vds->isNavigationWrappingAround());
         if (desktop != interimDesktop) {
             pos.setY(workspace()->geometry().height() - 1 - OFFSET);
+            transitionPort = ToposPort::North;
+            ++transitionSteps;
         }
     } else if (isBottom()) {
         const VirtualDesktop *interimDesktop = desktop;
         desktop = vds->below(desktop, vds->isNavigationWrappingAround());
         if (desktop != interimDesktop) {
             pos.setY(OFFSET);
+            transitionPort = ToposPort::South;
+            ++transitionSteps;
         }
     }
     if (Window *c = Workspace::self()->moveResizeWindow()) {
@@ -507,6 +519,9 @@ void Edge::switchDesktop(const QPoint &cursorPos)
             // user attempts to move a client to another desktop where it is ruleforced to not be
             return;
         }
+    }
+    if (transitionSteps == 1 && transitionPort && desktop != oldDesktop) {
+        vds->topos()->armTransition(oldDesktop, *transitionPort, m_output);
     }
     vds->setCurrent(desktop, m_output);
     if (vds->currentDesktop(m_output) != oldDesktop) {
