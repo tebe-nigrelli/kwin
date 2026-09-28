@@ -37,7 +37,7 @@ flowchart LR
     class X blocked
 ```
 
-## Why topology changes the desktop
+## Fork features
 
 | | Feature | What it unlocks |
 |---|---|---|
@@ -47,7 +47,7 @@ flowchart LR
 | ◇ | **Interactive graph editor** | Open Grid View and drag a desktop port onto another desktop. The live bridge preview shows exactly what will be connected. |
 | ⟳ | **Orientation transport** | Rotate movement in 45-degree steps or mirror it as an edge is crossed, so traversal can model non-flat spaces. |
 | ≋ | **Continuous traversal** | KWin resolves the graph while desktop gestures are in progress, including diagonal routes, blocked feedback, and animated placement. |
-| ⌘ | **Topology HUD** | See the graph in Overview with directional arrows, the current desktop, grid or loose-DAG layout, and adjustable spread. |
+| ⌘ | **Topology HUD** | See the graph in Grid View with directional arrows, the current desktop, grid or loose-DAG layout, and adjustable spread. |
 | ⟲ | **History and profiles** | Undo, redo, revisit history, and save named topologies for different activities. |
 
 ### Built-in shapes
@@ -63,19 +63,38 @@ The graph is not just decoration. Topos plugs its resolver into KWin's normal
 virtual-desktop navigation, screen-edge switching, and interactive gesture
 path. The map you edit is the map KWin actually follows.
 
-## Edit it where you use it
+## Set it up
 
-Open Plasma's **Grid View** to reveal topology handles on every desktop card.
-Drag a handle to another desktop to create a route:
+> [!WARNING]
+> This is an experimental KWin fork, not a standalone compositor. Replacing
+> the compositor can interrupt your graphical session, so save your work and
+> keep a recovery path available.
+
+This branch targets the Plasma 6.7 KWin codebase. To install it, follow the
+[build and recovery guide](BUILD.md). It currently documents the Arch Linux
+package workflow.
+
+After installation:
+
+1. Log out of Plasma and back in so the forked KWin is running.
+2. Create at least two virtual desktops on the **Virtual Desktops** page in
+   System Settings.
+3. Press <kbd>Meta</kbd>+<kbd>G</kbd> (the default shortcut) to open **Grid
+   View**. Each desktop card has eight topology handles, and the topology map
+   and preset controls appear in the HUD.
+4. Choose a built-in preset, or drag a handle onto another desktop to create a
+   custom route.
+
+Topos initially inherits the ordinary KWin grid, so no extra configuration is
+needed to keep existing desktop navigation working. To edit a route:
 
 - drop in the inner target to create a two-way connection;
 - drop in the outer target to create a one-way connection;
 - double-click a connection to remove that route, or drag it again to replace it;
 - use the HUD to inspect the whole graph, switch layouts, and load or save a preset.
 
-The ordinary Plasma desktop remains ordinary until you open the topology
-tools. Existing grid relationships are inherited, so a fresh install starts
-from familiar KWin behavior rather than an empty graph.
+Run `toposctl status` to confirm that the D-Bus service is available and inspect
+the active topology.
 
 ## Script the graph
 
@@ -104,24 +123,6 @@ toposctl undo
 Desktop selectors can use a desktop name, ID, or index. The public
 `org.kde.KWin.Topos` D-Bus interface also exposes graph state, profiles,
 history, edits, and runtime settings for other tools.
-
-## Build and try it
-
-> [!WARNING]
-> This is an experimental KWin fork, not a standalone compositor. Replacing
-> the compositor can interrupt your graphical session, so save your work and
-> keep a recovery path available.
-
-This branch currently targets the Plasma 6.7 KWin codebase. The included
-[build guide](BUILD.md) covers the Arch package workflow, installation,
-reloading KWin, and restoring the distribution package. The repository helper
-can perform that documented package build after the package tree is prepared:
-
-```bash
-./install-topos-kwin.sh
-```
-
-For normal KWin development, see KDE's [contributing guide](CONTRIBUTING.md).
 
 ## Under the hood
 
