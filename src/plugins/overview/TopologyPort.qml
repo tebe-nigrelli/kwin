@@ -19,8 +19,8 @@ Item {
     signal pairingFinished(point scenePosition)
     signal pairingCancelled()
 
-    width: 48
-    height: 48
+    width: root.connectionSymbol !== "" ? 30 : 48
+    height: root.connectionSymbol !== "" ? 30 : 48
     Accessible.role: Accessible.Button
     Accessible.name: edge.portName + " topology port of " + desktopName
 
@@ -68,9 +68,9 @@ Item {
     Rectangle {
         anchors.centerIn: parent
         visible: root.connectionSymbol !== ""
-        width: 36
-        height: 28
-        radius: 7
+        width: 28
+        height: 24
+        radius: 6
         color: Qt.rgba(Kirigami.Theme.highlightColor.r,
                        Kirigami.Theme.highlightColor.g,
                        Kirigami.Theme.highlightColor.b,
@@ -84,7 +84,7 @@ Item {
             text: root.connectionSymbol
             rotation: root.symbolRotation
             color: Kirigami.Theme.textColor
-            font.pixelSize: 16
+            font.pixelSize: 14
             font.bold: true
         }
     }

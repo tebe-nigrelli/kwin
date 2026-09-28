@@ -84,6 +84,11 @@ SlideEffect::SlideEffect()
         slideScreenResult.iterator->toposTraversalChanged(state);
         effects->setActiveFullScreenEffect(this);
     });
+    connect(VirtualDesktopManager::self()->topos(), &ToposManager::traversalCancelled, this, [this](LogicalOutput *) {
+        if (isActive()) {
+            finishedSwitching();
+        }
+    });
 }
 
 SlideEffect::~SlideEffect()
