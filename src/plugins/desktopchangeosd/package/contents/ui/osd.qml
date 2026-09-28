@@ -38,7 +38,7 @@ PlasmaCore.Window {
         }
 
         implicitWidth: showGraph ? topologyGraph.width : Math.ceil(textElement.implicitWidth)
-        implicitHeight: showGraph ? textElement.implicitHeight + topologyGraph.height : textElement.implicitHeight
+        implicitHeight: showGraph ? topologyGraph.height : textElement.implicitHeight
 
         Kirigami.Heading {
             id: textElement
@@ -48,11 +48,12 @@ PlasmaCore.Window {
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.NoWrap
             elide: Text.ElideRight
+            visible: !dialogItem.showGraph
         }
 
         Item {
             id: topologyGraph
-            anchors.top: textElement.bottom
+            anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.max(280, Math.min(520, dialogItem.screenWidth * 0.38))
             height: Math.max(190, Math.min(340, dialogItem.screenHeight * 0.28))
@@ -346,17 +347,6 @@ PlasmaCore.Window {
                         font.bold: parent.index === dialogItem.currentIndex
                     }
 
-                    Text {
-                        anchors.top: parent.bottom
-                        anchors.topMargin: 2
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: 100
-                        horizontalAlignment: Text.AlignHCenter
-                        elide: Text.ElideRight
-                        text: parent.desktop ? parent.desktop.name : ""
-                        color: Kirigami.Theme.textColor
-                        font.pixelSize: 10
-                    }
                 }
             }
 

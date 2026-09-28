@@ -134,10 +134,26 @@ FocusScope {
         return 0;
     }
 
-    function syncCurrentDesktopAnchor() {
+    function workspaceCurrentDesktop() {
+        if (!targetScreen) return KWinComponents.Workspace.currentDesktop;
+        const desktop = KWinComponents.Workspace.currentDesktopForScreen(targetScreen);
+        return desktop ? desktop : KWinComponents.Workspace.currentDesktop;
+    }
+
+    function syncCurrentDesktopAnchor(useWorkspaceDesktop) {
+        const anchorDesktop = useWorkspaceDesktop ? workspaceCurrentDesktop() : currentDesktop;
+        if (!anchorDesktop) return;
+
+        // SceneView keeps a selection independently from the desktop that is
+        // actually active. A stale selection made a later zoom-out gesture
+        // operate on an off-screen desktop and could leave the view zoomed in.
+        if (useWorkspaceDesktop && currentDesktop !== anchorDesktop) {
+            KWinComponents.SceneView.currentDesktop = anchorDesktop;
+        }
+
         for (let i = 0; i < allDesktopHeaps.count; ++i) {
             const item = allDesktopHeaps.itemAt(i);
-            if (item && item.desktop === currentDesktop) {
+            if (item && item.desktop === anchorDesktop) {
                 allDesktopHeaps.currentHeap = item.nestedHeap;
                 allDesktopHeaps.currentBackgroundItem = item;
                 return;
@@ -145,13 +161,24 @@ FocusScope {
         }
     }
 
-    // Grid/Overview views are cached. Re-anchor their geometry to the desktop
-    // that is actually current on this output whenever the view is entered,
-    // rather than retaining the desktop that happened to be selected last time.
-    onCurrentDesktopChanged: Qt.callLater(syncCurrentDesktopAnchor)
+    // Grid/Overview views are cached. Keep their anchor on the real desktop at
+    // gesture entry; browsing inside the effect may still move SceneView's
+    // selection afterwards without changing the real desktop.
+    onCurrentDesktopChanged: Qt.callLater(() => syncCurrentDesktopAnchor(false))
     onStateChanged: {
         if (state !== "initial") {
-            Qt.callLater(syncCurrentDesktopAnchor);
+            Qt.callLater(() => syncCurrentDesktopAnchor(true));
+        }
+    }
+
+    Connections {
+        target: KWinComponents.Workspace
+        function onCurrentDesktopChanged(previous, current, output) {
+            if (output && output !== container.targetScreen) return;
+            if (current && KWinComponents.SceneView.currentDesktop !== current) {
+                KWinComponents.SceneView.currentDesktop = current;
+            }
+            Qt.callLater(() => container.syncCurrentDesktopAnchor(false));
         }
     }
 
@@ -520,8 +547,8 @@ FocusScope {
                                            targetScreenDesktopOffset.y)
                 // deltaColumn and deltaRows are the difference between the column/row of this desktop
                 // compared to the column/row of the active one
-                property real deltaColumn: column - allDesktopHeaps.currentBackgroundItem.column - deltaX
-                property real deltaRow: row - allDesktopHeaps.currentBackgroundItem.row - deltaY
+                property real deltaColumn: column - (allDesktopHeaps.currentBackgroundItem ? allDesktopHeaps.currentBackgroundItem.column : column) - deltaX
+                property real deltaRow: row - (allDesktopHeaps.currentBackgroundItem ? allDesktopHeaps.currentBackgroundItem.row : row) - deltaY
 
                 onDeltaColumnChanged: heap.layout.updateCellsMapping()
                 onDeltaRowChanged: heap.layout.updateCellsMapping()
@@ -878,7 +905,7 @@ FocusScope {
         // interacting with it, e.g. by adding desktops
         container.verticalDesktopBar = container.verticalDesktopBar
         organized = true
-        Qt.callLater(syncCurrentDesktopAnchor)
+        Qt.callLater(() => syncCurrentDesktopAnchor(true))
     }
 
     Connections {
