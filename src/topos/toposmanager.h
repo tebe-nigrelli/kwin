@@ -42,6 +42,12 @@ struct ToposStep
     ToposTransport transport;
 };
 
+struct ToposTraversalPlacement
+{
+    VirtualDesktop *desktop = nullptr;
+    QPointF position;
+};
+
 struct ToposTraversalVisualState
 {
     bool active = false;
@@ -50,6 +56,8 @@ struct ToposTraversalVisualState
     VirtualDesktop *target = nullptr;
     ToposPort port = ToposPort::East;
     qreal progress = 0;
+    QPointF offset;
+    QVector<ToposTraversalPlacement> placements;
 };
 
 struct ToposTransitionHint
@@ -60,6 +68,9 @@ struct ToposTransitionHint
     ToposPort port = ToposPort::East;
     qreal startProgress = 0;
     qreal endProgress = 1;
+    QPointF startOffset;
+    QPointF endOffset;
+    QVector<ToposTraversalPlacement> placements;
 };
 
 class KWIN_EXPORT ToposManager : public QObject
@@ -142,6 +153,7 @@ public:
     Q_INVOKABLE void selectPort(const QString &desktopId, int port);
     Q_INVOKABLE void blockSelectedPort();
     Q_INVOKABLE void linkSelectedTo(const QString &desktopId, bool bidirectional);
+    Q_INVOKABLE void unlinkPort(const QString &desktopId, int port);
     Q_INVOKABLE void restorePort(const QString &desktopId, int port);
     Q_INVOKABLE void cancelSelection();
     Q_INVOKABLE QStringList compatibleProfiles() const;

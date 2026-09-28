@@ -83,6 +83,32 @@ inline QPointF portVector(ToposPort port)
     Q_UNREACHABLE();
 }
 
+// Screen-space placement for the 3x3 visual neighborhood. Navigation vectors
+// are unit length, while diagonal desktops need to sit one full screen away on
+// both axes so their corners line up without overlap.
+inline QPointF portGridVector(ToposPort port)
+{
+    switch (port) {
+    case ToposPort::North:
+        return QPointF(0, -1);
+    case ToposPort::NorthEast:
+        return QPointF(1, -1);
+    case ToposPort::East:
+        return QPointF(1, 0);
+    case ToposPort::SouthEast:
+        return QPointF(1, 1);
+    case ToposPort::South:
+        return QPointF(0, 1);
+    case ToposPort::SouthWest:
+        return QPointF(-1, 1);
+    case ToposPort::West:
+        return QPointF(-1, 0);
+    case ToposPort::NorthWest:
+        return QPointF(-1, -1);
+    }
+    Q_UNREACHABLE();
+}
+
 inline ToposPort oppositePort(ToposPort port)
 {
     return static_cast<ToposPort>((static_cast<int>(port) + 4) % 8);

@@ -29,6 +29,10 @@ namespace
 {
 constexpr int s_maxCrossingsPerUpdate = 32;
 constexpr qreal s_blockedMaximum = 0.15;
+// Diagonal traversal should require a deliberate diagonal gesture.  The old
+// 22.5 degree sectors made slightly imperfect horizontal/vertical swipes jump
+// into a diagonal edge too easily.
+constexpr qreal s_diagonalAxisRatio = 0.72;
 // Keep the current 45-degree sector until the pointer is roughly 12 degrees
 // past its nominal 22.5-degree boundary.
 constexpr qreal s_directionHysteresisAlignment = 0.8241261886220157; // cos(34.5 degrees)
@@ -604,6 +608,17 @@ bool ToposManager::setArc(const QString &sourceSelector, ToposPort port, const Q
 
     const ToposEndpoint endpoint{source->id(), port};
     const ToposEndpoint reverseEndpoint{target->id(), oppositePort(port)};
+    std::optional<ToposEndpoint> previousReverseEndpoint;
+    const auto currentIt = m_overrides.constFind(endpoint);
+    if (currentIt != m_overrides.cend() && currentIt.value()) {
+        const ToposEndpoint oldReverse{currentIt.value()->targetDesktopId, oppositePort(port)};
+        const auto oldReverseIt = m_overrides.constFind(oldReverse);
+        if (oldReverseIt != m_overrides.cend()
+            && oldReverseIt.value()
+            && oldReverseIt.value()->targetDesktopId == source->id()) {
+            previousReverseEndpoint = oldReverse;
+        }
+    }
     if (bidirectional) {
         const auto reverseIt = m_overrides.constFind(reverseEndpoint);
         if (reverseIt != m_overrides.cend()) {
@@ -621,7 +636,10 @@ bool ToposManager::setArc(const QString &sourceSelector, ToposPort port, const Q
     const QString label = bidirectional
         ? QStringLiteral("Link %1.%2 ↔ %3").arg(source->name(), portName(port), target->name())
         : QStringLiteral("Link %1.%2 → %3").arg(source->name(), portName(port), target->name());
-    return mutate(label, [this, endpoint, reverseEndpoint, source, target, bidirectional, transport](QString *) {
+    return mutate(label, [this, endpoint, reverseEndpoint, previousReverseEndpoint, source, target, bidirectional, transport](QString *) {
+        if (previousReverseEndpoint && (!bidirectional || *previousReverseEndpoint != reverseEndpoint)) {
+            m_overrides.remove(*previousReverseEndpoint);
+        }
         m_overrides.insert(endpoint, ToposArc{target->id(), transport});
         if (bidirectional) {
             m_overrides.insert(reverseEndpoint, ToposArc{source->id(), {}});
@@ -908,6 +926,11 @@ QVariantMap ToposManager::edgeInfo(const QString &desktopId, int portValue) cons
         result.insert(QStringLiteral("bidirectional"), reverseIt != m_overrides.cend()
             && reverseIt.value()
             && reverseIt.value()->targetDesktopId == desktopId);
+
+        const ToposResolvedArc reverseEffective = resolve(effective.target, oppositePort(port), m_desktops->isNavigationWrappingAround());
+        result.insert(QStringLiteral("effectiveBidirectional"), reverseEffective.exists
+            && reverseEffective.target
+            && reverseEffective.target->id() == desktopId);
     }
     return result;
 }
@@ -916,12 +939,6 @@ void ToposManager::selectPort(const QString &desktopId, int port)
 {
     if (port < 0 || port > 7 || !m_desktops->desktopForId(desktopId)) {
         return;
-    }
-    const ToposEndpoint endpoint{desktopId, static_cast<ToposPort>(port)};
-    const auto it = m_overrides.constFind(endpoint);
-    if (it != m_overrides.cend() && it.value()) {
-        QString ignored;
-        blockArc(desktopId, static_cast<ToposPort>(port), &ignored);
     }
     m_selectedDesktop = desktopId;
     m_selectedPort = port;
@@ -939,7 +956,44 @@ void ToposManager::linkSelectedTo(const QString &desktopId, bool bidirectional)
 {
     if (m_selectedDesktop.isEmpty() || m_selectedPort < 0) return;
     QString ignored;
-    if (setArc(m_selectedDesktop, static_cast<ToposPort>(m_selectedPort), desktopId, bidirectional, {}, &ignored)) {
+    setArc(m_selectedDesktop, static_cast<ToposPort>(m_selectedPort), desktopId, bidirectional, {}, &ignored);
+    cancelSelection();
+}
+
+void ToposManager::unlinkPort(const QString &desktopId, int portValue)
+{
+    if (portValue < 0 || portValue > 7) {
+        return;
+    }
+    VirtualDesktop *source = m_desktops->desktopForId(desktopId);
+    if (!source) {
+        return;
+    }
+
+    const ToposPort port = static_cast<ToposPort>(portValue);
+    const ToposResolvedArc arc = resolve(source, port, m_desktops->isNavigationWrappingAround());
+    if (!arc.exists || !arc.target) {
+        return;
+    }
+
+    const ToposEndpoint endpoint{desktopId, port};
+    const ToposEndpoint reverseEndpoint{arc.target->id(), oppositePort(port)};
+    const auto reverseIt = m_overrides.constFind(reverseEndpoint);
+    const bool explicitPair = reverseIt != m_overrides.cend()
+        && reverseIt.value()
+        && reverseIt.value()->targetDesktopId == desktopId;
+
+    const QString label = QStringLiteral("Unlink %1.%2").arg(source->name(), portName(port));
+    QString ignored;
+    mutate(label, [this, endpoint, reverseEndpoint, explicitPair](QString *) {
+        m_overrides.insert(endpoint, std::nullopt);
+        if (explicitPair) {
+            m_overrides.insert(reverseEndpoint, std::nullopt);
+        }
+        return true;
+    }, &ignored);
+
+    if (m_selectedDesktop == desktopId && m_selectedPort == portValue) {
         cancelSelection();
     }
 }
@@ -1596,6 +1650,14 @@ void ToposManager::bumpRevision()
 
 ToposPort ToposManager::graphPortForVector(const QPointF &vector, const ToposTransport &) const
 {
+    const qreal ax = std::abs(vector.x());
+    const qreal ay = std::abs(vector.y());
+    if (ax > 0.001 && ay / ax < s_diagonalAxisRatio) {
+        return vector.x() >= 0 ? ToposPort::East : ToposPort::West;
+    }
+    if (ay > 0.001 && ax / ay < s_diagonalAxisRatio) {
+        return vector.y() >= 0 ? ToposPort::South : ToposPort::North;
+    }
     return quantizeDirection(vector);
 }
 
@@ -1641,8 +1703,9 @@ void ToposManager::updateTraversal(const QPointF &rawDelta, LogicalOutput *outpu
         }
 
         const ToposPort port = *state.activePort;
-        const QPointF direction = portVector(port);
-        const qreal projection = std::max<qreal>(0, dot(state.residual, direction));
+        const QPointF direction = portGridVector(port);
+        const qreal directionLengthSquared = dot(direction, direction);
+        const qreal projection = std::max<qreal>(0, dot(state.residual, direction) / directionLengthSquared);
         state.segmentProgress = projection;
 
         if (!state.path.isEmpty()) {
@@ -1706,6 +1769,25 @@ ToposTraversalVisualState ToposManager::traversalVisualState(LogicalOutput *outp
     } else {
         visual.progress = std::clamp(it->segmentProgress, 0.0, 1.0);
     }
+
+    if (it->blocked && it->activePort) {
+        visual.offset = portGridVector(*it->activePort) * visual.progress;
+    } else {
+        visual.offset = it->residual;
+    }
+
+    // Paint the current desktop and every directly reachable neighbor at once.
+    // This makes the gesture a continuous 2-D surface instead of snapping
+    // between one source/target pair at a time.
+    visual.placements.append(ToposTraversalPlacement{it->cursor, QPointF(0, 0)});
+    for (int p = 0; p < 8; ++p) {
+        const ToposPort port = static_cast<ToposPort>(p);
+        const ToposResolvedArc arc = resolve(it->cursor, port, m_desktops->isNavigationWrappingAround());
+        if (!arc.exists || !arc.target || arc.target == it->cursor) {
+            continue;
+        }
+        visual.placements.append(ToposTraversalPlacement{arc.target, portGridVector(port)});
+    }
     return visual;
 }
 
@@ -1726,11 +1808,15 @@ VirtualDesktop *ToposManager::finishTraversal(LogicalOutput *output)
         hint.to = state.segmentTarget;
         hint.port = *state.activePort;
         hint.startProgress = visual.progress;
+        hint.startOffset = visual.offset;
+        hint.placements = visual.placements;
         if (!state.blocked && state.segmentTarget && state.segmentProgress >= m_settleThreshold) {
             finalDesktop = state.segmentTarget;
             hint.endProgress = 1.0;
+            hint.endOffset = portGridVector(*state.activePort);
         } else {
             hint.endProgress = 0.0;
+            hint.endOffset = QPointF();
         }
         m_transitionHints.insert(output, hint);
     }
