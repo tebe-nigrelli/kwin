@@ -472,6 +472,28 @@ void SlideEffectScreen::toposTraversalChanged(const ToposTraversalVisualState &s
     if (m_state == State::Inactive) {
         prepareSwitching();
     }
+
+    // Keep the finger velocity across the gesture -> settle-animation handoff.
+    // Resetting the spring to zero velocity caused a small pause/bump at release,
+    // which happened at the same time as the desktop-change preview appeared.
+    if (m_toposHasGestureSample) {
+        const qint64 elapsedMs = m_toposGestureClock.restart();
+        if (elapsedMs > 0 && elapsedMs < 120) {
+            const qreal dt = elapsedMs / 1000.0;
+            const QPointF instantaneousVelocity = (state.offset - m_toposLastGestureOffset) / dt;
+            constexpr qreal blend = 0.35;
+            m_toposGestureVelocity = m_toposGestureVelocity * (1.0 - blend)
+                + instantaneousVelocity * blend;
+        } else {
+            m_toposGestureVelocity = QPointF();
+        }
+    } else {
+        m_toposGestureClock.start();
+        m_toposGestureVelocity = QPointF();
+        m_toposHasGestureSample = true;
+    }
+    m_toposLastGestureOffset = state.offset;
+
     m_state = State::ActiveToposGesture;
     m_movingWindow = nullptr;
     m_toposFrom = state.source;
@@ -508,9 +530,21 @@ void SlideEffectScreen::startToposAnimation(const ToposTransitionHint &hint)
     for (const ToposTraversalPlacement &placement : hint.placements) {
         m_toposPlacements.append(ToposPaintPlacement{placement.desktop, placement.position});
     }
+    qreal carriedVelocity = 0;
+    const qreal progressRange = hint.endProgress - hint.startProgress;
+    if (m_toposHasGestureSample && std::abs(progressRange) > 0.0001) {
+        const QPointF offsetPerProgress = (hint.endOffset - hint.startOffset) / progressRange;
+        const qreal lengthSquared = QPointF::dotProduct(offsetPerProgress, offsetPerProgress);
+        if (lengthSquared > 0.0001) {
+            carriedVelocity = QPointF::dotProduct(m_toposGestureVelocity, offsetPerProgress) / lengthSquared;
+            carriedVelocity = std::clamp(carriedVelocity, qreal(-6.0), qreal(6.0));
+        }
+    }
+    m_toposHasGestureSample = false;
+
     m_toposMotion.setPosition(hint.startProgress);
     m_toposMotion.setAnchor(hint.endProgress);
-    m_toposMotion.setVelocity(0);
+    m_toposMotion.setVelocity(carriedVelocity);
     m_clock.reset();
     effects->addRepaint(m_screen->geometry());
 }
@@ -601,6 +635,9 @@ void SlideEffectScreen::finishedSwitching()
     m_toposAnimationEndOffset = QPointF();
     m_toposAnimationStartProgress = 0;
     m_toposAnimationEndProgress = 1;
+    m_toposLastGestureOffset = QPointF();
+    m_toposGestureVelocity = QPointF();
+    m_toposHasGestureSample = false;
     m_toposPlacements.clear();
     m_state = State::Inactive;
 }

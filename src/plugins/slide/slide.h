@@ -17,6 +17,7 @@
 #include "effect/timeline.h"
 #include "plugins/slide/springmotion.h"
 
+#include <QElapsedTimer>
 #include <QVector>
 
 namespace KWin
@@ -117,6 +118,10 @@ private:
     QPointF m_toposAnimationEndOffset;
     qreal m_toposAnimationStartProgress = 0;
     qreal m_toposAnimationEndProgress = 1;
+    QElapsedTimer m_toposGestureClock;
+    QPointF m_toposLastGestureOffset;
+    QPointF m_toposGestureVelocity;
+    bool m_toposHasGestureSample = false;
     struct ToposPaintPlacement {
         VirtualDesktop *desktop = nullptr;
         QPointF position;

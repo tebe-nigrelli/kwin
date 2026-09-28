@@ -134,6 +134,27 @@ FocusScope {
         return 0;
     }
 
+    function syncCurrentDesktopAnchor() {
+        for (let i = 0; i < allDesktopHeaps.count; ++i) {
+            const item = allDesktopHeaps.itemAt(i);
+            if (item && item.desktop === currentDesktop) {
+                allDesktopHeaps.currentHeap = item.nestedHeap;
+                allDesktopHeaps.currentBackgroundItem = item;
+                return;
+            }
+        }
+    }
+
+    // Grid/Overview views are cached. Re-anchor their geometry to the desktop
+    // that is actually current on this output whenever the view is entered,
+    // rather than retaining the desktop that happened to be selected last time.
+    onCurrentDesktopChanged: Qt.callLater(syncCurrentDesktopAnchor)
+    onStateChanged: {
+        if (state !== "initial") {
+            Qt.callLater(syncCurrentDesktopAnchor);
+        }
+    }
+
     function switchTo(desktop) {
         KWinComponents.SceneView.currentDesktop = desktop;
         effect.deactivate();
@@ -857,6 +878,7 @@ FocusScope {
         // interacting with it, e.g. by adding desktops
         container.verticalDesktopBar = container.verticalDesktopBar
         organized = true
+        Qt.callLater(syncCurrentDesktopAnchor)
     }
 
     Connections {
