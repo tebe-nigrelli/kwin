@@ -41,6 +41,12 @@ class WorkspaceWrapper : public QObject
     Q_PROPERTY(QList<KWin::VirtualDesktop *> desktops READ desktops NOTIFY desktopsChanged)
 
     /*!
+     * \qmlproperty QtObject Workspace::topos
+     * Topology manager used by virtual desktop navigation.
+     */
+    Q_PROPERTY(QObject *topos READ topos CONSTANT)
+
+    /*!
      * \qmlproperty VirtualDesktop Workspace::currentDesktop
      */
     Q_PROPERTY(KWin::VirtualDesktop *currentDesktop READ currentDesktop WRITE setCurrentDesktop NOTIFY currentDesktopChanged)
@@ -355,6 +361,7 @@ public:
     QPoint cursorPos() const;
 
     QList<VirtualDesktop *> desktops() const;
+    QObject *topos() const;
     VirtualDesktop *currentDesktop() const;
     void setCurrentDesktop(VirtualDesktop *desktop);
 

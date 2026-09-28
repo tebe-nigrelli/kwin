@@ -977,19 +977,13 @@ void ToposManager::unlinkPort(const QString &desktopId, int portValue)
     }
 
     const ToposEndpoint endpoint{desktopId, port};
-    const ToposEndpoint reverseEndpoint{arc.target->id(), oppositePort(port)};
-    const auto reverseIt = m_overrides.constFind(reverseEndpoint);
-    const bool explicitPair = reverseIt != m_overrides.cend()
-        && reverseIt.value()
-        && reverseIt.value()->targetDesktopId == desktopId;
 
     const QString label = QStringLiteral("Unlink %1.%2").arg(source->name(), portName(port));
     QString ignored;
-    mutate(label, [this, endpoint, reverseEndpoint, explicitPair](QString *) {
+    mutate(label, [this, endpoint](QString *) {
+        // A split bidirectional marker represents two independent arcs. Unlink
+        // only the half that was double-clicked and leave the reverse arc intact.
         m_overrides.insert(endpoint, std::nullopt);
-        if (explicitPair) {
-            m_overrides.insert(reverseEndpoint, std::nullopt);
-        }
         return true;
     }, &ignored);
 
@@ -1016,6 +1010,48 @@ void ToposManager::cancelSelection()
 QStringList ToposManager::compatibleProfiles() const
 {
     return listProfiles();
+}
+
+QStringList ToposManager::presetNames() const
+{
+    QStringList names = listBuiltins();
+    const QStringList profiles = listProfiles();
+    for (const QString &profile : profiles) {
+        if (!names.contains(profile, Qt::CaseInsensitive)) {
+            names.append(profile);
+        }
+    }
+    return names;
+}
+
+QString ToposManager::applyPreset(const QString &name)
+{
+    QString error;
+    const QString canonical = canonicalBuiltinName(name);
+    const bool ok = canonical.isEmpty() ? loadProfile(name, &error) : applyBuiltin(canonical, &error);
+    return ok ? QString() : error;
+}
+
+QString ToposManager::storePreset(const QString &name)
+{
+    QString error;
+    const QString trimmed = name.trimmed();
+    if (!saveProfile(trimmed, true, &error)) {
+        return error;
+    }
+    return QString();
+}
+
+QString ToposManager::removePreset(const QString &name)
+{
+    QString error;
+    if (!canonicalBuiltinName(name).isEmpty()) {
+        return QStringLiteral("Builtin presets cannot be deleted");
+    }
+    if (!deleteProfile(name, &error)) {
+        return error;
+    }
+    return QString();
 }
 
 QString ToposManager::selectedDesktop() const

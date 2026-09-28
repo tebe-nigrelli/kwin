@@ -157,6 +157,10 @@ public:
     Q_INVOKABLE void restorePort(const QString &desktopId, int port);
     Q_INVOKABLE void cancelSelection();
     Q_INVOKABLE QStringList compatibleProfiles() const;
+    Q_INVOKABLE QStringList presetNames() const;
+    Q_INVOKABLE QString applyPreset(const QString &name);
+    Q_INVOKABLE QString storePreset(const QString &name);
+    Q_INVOKABLE QString removePreset(const QString &name);
 
     QString selectedDesktop() const;
     int selectedPort() const;

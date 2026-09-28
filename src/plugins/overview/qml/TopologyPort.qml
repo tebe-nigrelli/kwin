@@ -32,42 +32,30 @@ Item {
         height: 24
         radius: width / 2
         color: {
-            if (root.edge.state === "blocked") {
-                return Qt.rgba(Kirigami.Theme.negativeTextColor.r,
-                               Kirigami.Theme.negativeTextColor.g,
-                               Kirigami.Theme.negativeTextColor.b, 0.22);
-            }
             if (root.edge.exists === true) {
                 const alpha = root.edge.state === "custom" ? 0.72 : 0.42;
                 return Qt.rgba(Kirigami.Theme.highlightColor.r,
                                Kirigami.Theme.highlightColor.g,
                                Kirigami.Theme.highlightColor.b, alpha);
             }
+            // A removed/blocked edge is intentionally shown as the same empty
+            // handle as an unused port. The blocked override still prevents
+            // traversal; the UI does not leave a red "x" behind.
             return Qt.rgba(Kirigami.Theme.backgroundColor.r,
                            Kirigami.Theme.backgroundColor.g,
                            Kirigami.Theme.backgroundColor.b, 0.50);
         }
         border.width: root.selected ? 3 : 2
-        border.color: root.edge.state === "blocked" ? Kirigami.Theme.negativeTextColor :
-                      (root.edge.exists === true ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor)
+        border.color: root.edge.exists === true ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         scale: mouse.containsMouse || root.selected ? 1.22 : 1.0
 
         Behavior on scale {
             NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
         }
 
-        Text {
-            anchors.centerIn: parent
-            visible: root.edge.state === "blocked"
-            text: "×"
-            color: Kirigami.Theme.negativeTextColor
-            font.pixelSize: 16
-            font.bold: true
-        }
-
         Rectangle {
             anchors.centerIn: parent
-            visible: root.edge.bidirectional === true
+            visible: root.edge.exists === true && root.edge.bidirectional === true
             width: parent.width + 9
             height: parent.height + 9
             radius: width / 2
@@ -80,8 +68,8 @@ Item {
     Rectangle {
         anchors.centerIn: parent
         visible: root.connectionSymbol !== ""
-        width: 42
-        height: 30
+        width: 36
+        height: 28
         radius: 7
         color: Qt.rgba(Kirigami.Theme.highlightColor.r,
                        Kirigami.Theme.highlightColor.g,
@@ -96,7 +84,7 @@ Item {
             text: root.connectionSymbol
             rotation: root.symbolRotation
             color: Kirigami.Theme.textColor
-            font.pixelSize: 17
+            font.pixelSize: 16
             font.bold: true
         }
     }

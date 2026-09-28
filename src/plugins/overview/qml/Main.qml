@@ -477,6 +477,9 @@ FocusScope {
                 readonly property bool current: currentDesktop === desktop
                 readonly property bool nearCurrent: Math.abs(deltaColumn) <= 1 && Math.abs(deltaRow) <= 1
                 readonly property var nestedHeap: heap
+                // Geometry target for Topos handles. Unlike mainBackground,
+                // this item follows the actual desktop card size in overview/grid transitions.
+                readonly property Item topologyAnchorItem: backgroundArea
 
                 z: dragActive ? 1 : 0
                 readonly property bool dragActive: heap.dragActive || dragHandler.active
