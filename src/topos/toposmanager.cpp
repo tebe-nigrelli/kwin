@@ -1905,12 +1905,69 @@ ToposTraversalVisualState ToposManager::traversalVisualState(LogicalOutput *outp
     }
     appendPlacement(it->cursor, cursorPosition);
 
+    // When the gesture is actually heading through a corner and the corner
+    // plus its two bordering edge ports all resolve to the same desktop, use
+    // that shared desktop as the corner preview. This preloads the destination
+    // before the crossing and avoids painting three copies of the same desktop
+    // around the corner. Pure horizontal/vertical gestures keep their normal
+    // edge previews.
+    VirtualDesktop *cornerConsensus = nullptr;
+    std::optional<ToposPort> cornerHorizontal;
+    std::optional<ToposPort> cornerVertical;
+    std::optional<ToposPort> cornerPort;
+    if (length(it->residual) > 0.001) {
+        const ToposPort candidate = graphPortForVector(it->residual, it->frame);
+        switch (candidate) {
+        case ToposPort::NorthEast:
+            cornerPort = candidate;
+            cornerHorizontal = ToposPort::East;
+            cornerVertical = ToposPort::North;
+            break;
+        case ToposPort::SouthEast:
+            cornerPort = candidate;
+            cornerHorizontal = ToposPort::East;
+            cornerVertical = ToposPort::South;
+            break;
+        case ToposPort::SouthWest:
+            cornerPort = candidate;
+            cornerHorizontal = ToposPort::West;
+            cornerVertical = ToposPort::South;
+            break;
+        case ToposPort::NorthWest:
+            cornerPort = candidate;
+            cornerHorizontal = ToposPort::West;
+            cornerVertical = ToposPort::North;
+            break;
+        default:
+            break;
+        }
+    }
+    if (cornerPort && cornerHorizontal && cornerVertical) {
+        const bool wrap = m_desktops->isNavigationWrappingAround();
+        const ToposResolvedArc diagonal = resolve(it->cursor, *cornerPort, wrap);
+        const ToposResolvedArc horizontal = resolve(it->cursor, *cornerHorizontal, wrap);
+        const ToposResolvedArc vertical = resolve(it->cursor, *cornerVertical, wrap);
+        if (diagonal.exists && horizontal.exists && vertical.exists
+            && diagonal.target && diagonal.target == horizontal.target
+            && diagonal.target == vertical.target) {
+            cornerConsensus = diagonal.target;
+            const QPointF position = cursorPosition
+                + applyTransport(portGridVector(*cornerPort), inverseTransport(cursorFrame));
+            appendPlacement(cornerConsensus, position);
+        }
+    }
+
     // Paint every directly reachable neighbor in the same stable coordinate
     // frame. Diagonal vectors stay a full screen apart on both axes.
     for (int p = 0; p < 8; ++p) {
         const ToposPort port = static_cast<ToposPort>(p);
         const ToposResolvedArc arc = resolve(it->cursor, port, m_desktops->isNavigationWrappingAround());
         if (!arc.exists || !arc.target || arc.target == it->cursor) {
+            continue;
+        }
+        if (cornerConsensus && arc.target == cornerConsensus
+            && ((cornerHorizontal && port == *cornerHorizontal)
+                || (cornerVertical && port == *cornerVertical))) {
             continue;
         }
         const QPointF position = cursorPosition

@@ -145,6 +145,37 @@ PlasmaCore.Window {
                 return p;
             }
 
+            function fitGraphPositions(points, w, h, margin) {
+                if (!points || points.length === 0) return [];
+                let minX = points[0].x;
+                let maxX = points[0].x;
+                let minY = points[0].y;
+                let maxY = points[0].y;
+                for (let i = 1; i < points.length; ++i) {
+                    minX = Math.min(minX, points[i].x);
+                    maxX = Math.max(maxX, points[i].x);
+                    minY = Math.min(minY, points[i].y);
+                    maxY = Math.max(maxY, points[i].y);
+                }
+                const spanX = maxX - minX;
+                const spanY = maxY - minY;
+                if (spanX < 1 && spanY < 1) return graphGridPositions(w, h, points.length);
+                const usableW = Math.max(1, w - 2 * margin);
+                const usableH = Math.max(1, h - 2 * margin);
+                const scaleX = spanX > 0 ? usableW / spanX : 1e9;
+                const scaleY = spanY > 0 ? usableH / spanY : 1e9;
+                const scale = Math.min(scaleX, scaleY);
+                const contentW = spanX * scale;
+                const contentH = spanY * scale;
+                const offsetX = (w - contentW) / 2 - minX * scale;
+                const offsetY = (h - contentH) / 2 - minY * scale;
+                const result = [];
+                for (let i = 0; i < points.length; ++i) {
+                    result.push({ x: points[i].x * scale + offsetX, y: points[i].y * scale + offsetY });
+                }
+                return result;
+            }
+
             function rebuildGraph() {
                 const desktops = Workspace.desktops;
                 const n = desktops.length;
@@ -176,9 +207,12 @@ PlasmaCore.Window {
                 }
 
                 const loose = manager && manager.topologyGraphLayout === "loose";
-                positions = loose
+                const rawPositions = loose
                     ? graphLoosePositions(width, height, n, edges)
                     : graphGridPositions(width, height, n);
+                positions = loose
+                    ? fitGraphPositions(rawPositions, width, height, 34)
+                    : rawPositions;
                 graphEdges = edges;
                 layoutEpoch++;
                 edgeCanvas.requestPaint();
