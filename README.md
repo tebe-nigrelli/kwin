@@ -1,49 +1,149 @@
-# KWin
+<p align="center">
+  <img src="logo.png" width="112" alt="KWin logo">
+</p>
 
-KWin is an easy to use, but flexible, compositor for Wayland on Linux. Its primary usage is in conjunction with a Desktop Shell (e.g. KDE Plasma Desktop). KWin is designed to go out of the way; users should not notice that they use a window manager at all. Nevertheless KWin provides a steep learning curve for advanced features, which are available, if they do not conflict with the primary mission. KWin does not have a dedicated targeted user group, but follows the targeted user group of the Desktop Shell using KWin as it's window manager.
+<h1 align="center">KWin Topos</h1>
 
-## KWin is not...
+<p align="center">
+  <strong>Virtual desktops, liberated from the grid.</strong><br>
+  A KWin fork that turns your workspace into a graph you can see, shape, and traverse.
+</p>
 
- * a standalone Wayland compositor (c.f. labwc, sway) and does not provide any functionality belonging to a Desktop Shell.
- * a replacement for window managers designed for use with a specific Desktop Shell (e.g. GNOME Shell)
- * a minimalistic window manager
- * designed for use with network transparency, though it is possible (with e.g. waypipe).
+---
 
-# Contributing to KWin
+Most desktop pagers assume every workspace belongs in a rectangle. Topos keeps
+that familiar grid as the default, then adds a graph on top: every virtual
+desktop is a vertex and every direction you can travel is an editable edge.
 
-Please refer to the [contributing document](CONTRIBUTING.md) for everything you need to know to get started contributing to KWin.
+That means **east can lead to any desktop**, a corner can become a shortcut,
+an edge can be one-way, and an entire layout can wrap like a cylinder, torus,
+or sphere.
 
-# Contacting KWin development team
+```mermaid
+flowchart LR
+    I((1<br>Inbox)) -- E --> W((2<br>Work))
+    W -- W --> I
+    W -- E --> C((3<br>Code))
+    C -- W --> W
+    W -- SE shortcut --> M((4<br>Music))
+    M -- N --> I
+    C -. blocked east .-> X[×]
 
- * IRC: #kde-kwin on irc.libera.chat
- * Matrix: [#kwin:kde.org](https://go.kde.org/matrix/#/#kwin:kde.org)
+    classDef current fill:#3daee9,color:#fff,stroke:#1d79a8,stroke-width:3px
+    classDef desktop fill:#232629,color:#eff0f1,stroke:#7f8c8d,stroke-width:2px
+    classDef blocked fill:transparent,color:#da4453,stroke:transparent
+    class W current
+    class I,C,M desktop
+    class X blocked
+```
 
-# Support
-## Application Developer
-If you are an application developer having questions regarding windowing systems (either X11 or Wayland) please do not hesitate to contact us.
+## Why topology changes the desktop
 
-## End user
-Please contact the support channels of your Linux distribution for user support. The KWin development team does not provide end user support.
+| | Feature | What it unlocks |
+|---|---|---|
+| ◉ | **A real workspace graph** | Connect any desktop to any other desktop instead of accepting row-and-column routing. |
+| ↗ | **Eight directional ports** | Route north, north-east, east, south-east, south, south-west, west, and north-west independently. |
+| ⇄ | **Directed or two-way edges** | Build deliberate one-way flows, symmetric paths, shortcuts, dead ends, and hubs. |
+| ◇ | **Interactive graph editor** | Open Grid View and drag a desktop port onto another desktop. The live bridge preview shows exactly what will be connected. |
+| ⟳ | **Orientation transport** | Rotate movement in 45-degree steps or mirror it as an edge is crossed, so traversal can model non-flat spaces. |
+| ≋ | **Continuous traversal** | KWin resolves the graph while desktop gestures are in progress, including diagonal routes, blocked feedback, and animated placement. |
+| ⌘ | **Topology HUD** | See the graph in Overview with directional arrows, the current desktop, grid or loose-DAG layout, and adjustable spread. |
+| ⟲ | **History and profiles** | Undo, redo, revisit history, and save named topologies for different activities. |
 
-# Reporting bugs
+### Built-in shapes
 
-Please use [KDE's bugtracker](https://bugs.kde.org) and report for [product KWin](https://bugs.kde.org/enter_bug.cgi?product=kwin).
+Start with a preset and customize from there:
 
-## Guidelines for new features
+- **Base Grid** — standard KWin behavior, with topology tools ready when you need them.
+- **Cylinder X / Cylinder Y** — wrap on one axis and keep boundaries on the other.
+- **Torus** — wrap both axes; every edge leads somewhere.
+- **Sphere** — wrap horizontally and cross the poles with orientation-aware routing.
 
-A new Feature can only be added to KWin if:
+The graph is not just decoration. Topos plugs its resolver into KWin's normal
+virtual-desktop navigation, screen-edge switching, and interactive gesture
+path. The map you edit is the map KWin actually follows.
 
- * it does not violate the primary missions as stated at the start of this document
- * it does not introduce instabilities
- * it is maintained, that is bugs are fixed in a timely manner (second next minor release) if it is not a corner case.
- * it works together with all existing features
- * it supports both single and multi screen
- * it adds a significant advantage
- * it is feature complete, that is supports at least all useful features from competitive implementations
- * it is not a special case for a small user group
- * it does not increase code complexity significantly
- * it does not affect KWin's license (GPLv2+)
+## Edit it where you use it
 
-All new added features are under probation, that is if any of the non-functional requirements as listed above do not hold true in the next two feature releases, the added feature will be removed again.
+Open Plasma's **Grid View** to reveal topology handles on every desktop card.
+Drag a handle to another desktop to create a route:
 
-The same non functional requirements hold true for any kind of plugins (effects, scripts, etc.). It is suggested to use scripted plugins and distribute them separately.
+- drop in the inner target to create a two-way connection;
+- drop in the outer target to create a one-way connection;
+- double-click a connection to remove that route, or drag it again to replace it;
+- use the HUD to inspect the whole graph, switch layouts, and load or save a preset.
+
+The ordinary Plasma desktop remains ordinary until you open the topology
+tools. Existing grid relationships are inherited, so a fresh install starts
+from familiar KWin behavior rather than an empty graph.
+
+## Script the graph
+
+`toposctl` exposes the same model for terminal workflows and automation:
+
+```bash
+# Inspect the active topology
+toposctl status
+toposctl edge list
+
+# Try a built-in topology
+toposctl preset list
+toposctl preset apply Torus
+
+# Make Focus → Build the eastward route, and create the inverse edge too
+toposctl --bidirectional edge set Focus E Build
+
+# Turn the north-east edge of Focus into a boundary
+toposctl edge block Focus NE
+
+# Save the result and undo the latest edit if needed
+toposctl config save "Deep Work"
+toposctl undo
+```
+
+Desktop selectors can use a desktop name, ID, or index. The public
+`org.kde.KWin.Topos` D-Bus interface also exposes graph state, profiles,
+history, edits, and runtime settings for other tools.
+
+## Build and try it
+
+> [!WARNING]
+> This is an experimental KWin fork, not a standalone compositor. Replacing
+> the compositor can interrupt your graphical session, so save your work and
+> keep a recovery path available.
+
+This branch currently targets the Plasma 6.7 KWin codebase. The included
+[build guide](BUILD.md) covers the Arch package workflow, installation,
+reloading KWin, and restoring the distribution package. The repository helper
+can perform that documented package build after the package tree is prepared:
+
+```bash
+./install-topos-kwin.sh
+```
+
+For normal KWin development, see KDE's [contributing guide](CONTRIBUTING.md).
+
+## Under the hood
+
+The implementation is intentionally part of KWin rather than a pager-only
+simulation:
+
+- `ToposManager` resolves graph edges and owns traversal, profiles, and history.
+- the Overview effect provides the visual editor, bridge preview, and graph HUD;
+- virtual-desktop and screen-edge navigation consult the topology resolver;
+- `.topos` profiles are watched and loaded at runtime;
+- `toposctl` talks to KWin through a versioned D-Bus API.
+
+The result is a small change in vocabulary with a large change in possibility:
+**workspaces are places, directions are choices, and the path between them is
+yours to design.**
+
+## About KWin
+
+[KWin](https://invent.kde.org/plasma/kwin) is KDE Plasma's flexible Wayland
+compositor and window manager. This project is a downstream experimental fork;
+the Topos additions are not part of upstream KWin. For issues specific to this
+fork, use this repository rather than KDE's bug tracker.
+
+KWin and this fork are distributed under the licenses listed in
+[`LICENSES/`](LICENSES/).
