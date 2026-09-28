@@ -1535,12 +1535,25 @@ ToposOverrideMap ToposManager::builtinOverrides(const QString &name, QString *er
                 {ToposPort::SouthEast, 1, 1}, {ToposPort::SouthWest, -1, 1},
             };
             for (const DiagonalSpec &spec : diagonals) {
-                if ((spec.dy < 0 && coords.y() != 0) || (spec.dy > 0 && coords.y() != height - 1)) continue;
-                int shiftedX = width > 0 ? (coords.x() + spec.dx + width) % width : coords.x();
-                const int reflectedX = width - 1 - shiftedX;
-                const int targetY = spec.dy < 0 ? 0 : height - 1;
-                if (VirtualDesktop *target = m_desktops->grid().at(QPoint(reflectedX, targetY))) {
-                    result.insert(ToposEndpoint{desktop->id(), spec.port}, ToposArc{target->id(), ToposTransport{4, false}});
+                const bool crossesPole = (spec.dy < 0 && coords.y() == 0)
+                    || (spec.dy > 0 && coords.y() == height - 1);
+                if (crossesPole) {
+                    const int shiftedX = width > 0 ? (coords.x() + spec.dx + width) % width : coords.x();
+                    const int reflectedX = width - 1 - shiftedX;
+                    const int targetY = spec.dy < 0 ? 0 : height - 1;
+                    if (VirtualDesktop *target = m_desktops->grid().at(QPoint(reflectedX, targetY))) {
+                        result.insert(ToposEndpoint{desktop->id(), spec.port}, ToposArc{target->id(), ToposTransport{4, false}});
+                    }
+                    continue;
+                }
+
+                // Away from the poles a sphere still wraps horizontally. The
+                // old preset returned before the generic diagonal-wrap pass,
+                // which left NE/NW/SE/SW missing on the left and right edges.
+                VirtualDesktop *plain = basisDiagonal(desktop, spec.port, false, false);
+                VirtualDesktop *wrapped = basisDiagonal(desktop, spec.port, true, false);
+                if (!plain && wrapped) {
+                    result.insert(ToposEndpoint{desktop->id(), spec.port}, ToposArc{wrapped->id(), {}});
                 }
             }
         }

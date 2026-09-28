@@ -60,7 +60,12 @@ OverviewEffect::OverviewEffect()
         }
     };
 
-    connect(m_overviewState, &EffectTogglableState::inProgressChanged, this, &OverviewEffect::overviewGestureInProgressChanged);
+    connect(m_overviewState, &EffectTogglableState::inProgressChanged, this, [this, cancelToposTraversal]() {
+        if (m_overviewState->inProgress()) {
+            cancelToposTraversal();
+        }
+        Q_EMIT overviewGestureInProgressChanged();
+    });
     connect(m_overviewState, &EffectTogglableState::partialActivationFactorChanged, this, &OverviewEffect::overviewPartialActivationFactorChanged);
 
     connect(m_overviewState, &EffectTogglableState::statusChanged, this, [this, cancelToposTraversal](EffectTogglableState::Status status) {
@@ -123,10 +128,20 @@ OverviewEffect::OverviewEffect()
         }
     });
 
-    connect(m_transitionState, &EffectTogglableState::inProgressChanged, this, &OverviewEffect::transitionGestureInProgressChanged);
+    connect(m_transitionState, &EffectTogglableState::inProgressChanged, this, [this, cancelToposTraversal]() {
+        if (m_transitionState->inProgress()) {
+            cancelToposTraversal();
+        }
+        Q_EMIT transitionGestureInProgressChanged();
+    });
     connect(m_transitionState, &EffectTogglableState::partialActivationFactorChanged, this, &OverviewEffect::transitionPartialActivationFactorChanged);
 
-    connect(m_gridState, &EffectTogglableState::inProgressChanged, this, &OverviewEffect::gridGestureInProgressChanged);
+    connect(m_gridState, &EffectTogglableState::inProgressChanged, this, [this, cancelToposTraversal]() {
+        if (m_gridState->inProgress()) {
+            cancelToposTraversal();
+        }
+        Q_EMIT gridGestureInProgressChanged();
+    });
     connect(m_gridState, &EffectTogglableState::partialActivationFactorChanged, this, &OverviewEffect::gridPartialActivationFactorChanged);
 
     connect(effects, &EffectsHandler::desktopChanging, this, [this](VirtualDesktop *old, QPointF desktopOffset, EffectWindow *, LogicalOutput *output) {

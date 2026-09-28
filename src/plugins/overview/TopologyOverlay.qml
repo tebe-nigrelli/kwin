@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PC3
+import org.kde.kwin as KWinComponents
 
 Item {
     id: root
@@ -25,6 +26,9 @@ Item {
     property var graphPositions: []
     property var graphEdges: []
     property int graphEpoch: 0
+    property bool hudMenuVisible: true
+    property bool hudRight: true
+    property bool hudBottom: false
     readonly property bool pairing: manager && manager.selectedDesktop !== "" && manager.selectedPort >= 0
     readonly property real targetOuterRadius: 68
     readonly property real targetInnerRadius: 40
@@ -217,13 +221,8 @@ Item {
     }
 
     function graphDesktopId(index) {
-        const item = root.desktopRepeater.itemAt(index);
-        return item && item.desktop ? item.desktop.id : "";
-    }
-
-    function graphDesktopName(index) {
-        const item = root.desktopRepeater.itemAt(index);
-        return item && item.desktop ? item.desktop.name : (index + 1).toString();
+        const desktops = KWinComponents.Workspace.desktops;
+        return index >= 0 && index < desktops.length ? desktops[index].id : "";
     }
 
     function graphDesktopIndex(id) {
@@ -234,37 +233,23 @@ Item {
     }
 
     function graphGridPositions(w, h, n) {
-        const margin = 28;
-        let minRow = 100000;
-        let maxRow = -100000;
-        let minColumn = 100000;
-        let maxColumn = -100000;
-        const grid = [];
-        for (let i = 0; i < n; ++i) {
-            const item = root.desktopRepeater.itemAt(i);
-            const row = item && item.row !== undefined ? item.row : Math.floor(i / Math.max(1, Math.ceil(Math.sqrt(n))));
-            const column = item && item.column !== undefined ? item.column : i % Math.max(1, Math.ceil(Math.sqrt(n)));
-            grid.push({ row: row, column: column });
-            minRow = Math.min(minRow, row);
-            maxRow = Math.max(maxRow, row);
-            minColumn = Math.min(minColumn, column);
-            maxColumn = Math.max(maxColumn, column);
-        }
-        const rowSpan = Math.max(1, maxRow - minRow);
-        const columnSpan = Math.max(1, maxColumn - minColumn);
+        const margin = 34;
+        const rows = Math.max(1, KWinComponents.Workspace.desktopGridHeight);
+        const columns = Math.max(1, Math.ceil(n / rows));
+        const rowSpan = Math.max(1, rows - 1);
+        const columnSpan = Math.max(1, columns - 1);
         const usableW = Math.max(1, w - 2 * margin);
         const usableH = Math.max(1, h - 2 * margin);
-        const positions = [];
+        const result = [];
         for (let i = 0; i < n; ++i) {
-            const x = maxColumn === minColumn
-                ? w / 2
-                : margin + (grid[i].column - minColumn) / columnSpan * usableW;
-            const y = maxRow === minRow
-                ? h / 2
-                : margin + (grid[i].row - minRow) / rowSpan * usableH;
-            positions.push({ x: x, y: y });
+            const row = Math.floor(i / columns);
+            const column = i % columns;
+            result.push({
+                x: columns === 1 ? w / 2 : margin + column / columnSpan * usableW,
+                y: rows === 1 ? h / 2 : margin + row / rowSpan * usableH
+            });
         }
-        return positions;
+        return result;
     }
 
     function graphLoosePositions(w, h, n, edges) {
@@ -324,7 +309,7 @@ Item {
 
     function rebuildGraph() {
         if (!graphPanel) return;
-        const n = root.desktopRepeater.count;
+        const n = KWinComponents.Workspace.desktops.length;
         const edgesByPair = {};
         const edges = [];
 
@@ -478,6 +463,13 @@ Item {
         ctx.stroke();
     }
 
+    function escapeHud() {
+        // The topology map is informational, so keep it out from under the
+        // pointer. Move the whole HUD diagonally so the controls stay attached.
+        hudRight = !hudRight;
+        hudBottom = !hudBottom;
+    }
+
     function refreshPresets() {
         presetModel = manager ? manager.presetNames() : [];
         if (presetCombo && manager && manager.activeProfile !== "") {
@@ -518,6 +510,7 @@ Item {
     }
     onVisibleChanged: {
         if (!visible && pairing) cancelPairing();
+        if (visible) hudMenuVisible = true;
     }
 
     Connections {
@@ -532,37 +525,115 @@ Item {
         function onSettingsChanged() { root.rebuildGraph(); }
     }
 
-    Rectangle {
-        id: graphPanel
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.topMargin: Kirigami.Units.largeSpacing
-        anchors.rightMargin: Kirigami.Units.largeSpacing
-        width: Math.min(360, Math.max(260, parent.width * 0.25))
-        height: Math.min(220, Math.max(180, parent.height * 0.22))
-        radius: Kirigami.Units.cornerRadius
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
-        border.width: 1
-        border.color: Kirigami.Theme.textColor
+    Item {
+        id: topologyHud
+        readonly property real edgeMargin: Kirigami.Units.largeSpacing
+        readonly property real gap: Kirigami.Units.smallSpacing
+        width: Math.max(graphPanel.width, presetBar.visible ? presetBar.width : 0)
+        height: graphPanel.height + (presetBar.visible ? gap + presetBar.height : 0)
+        x: root.hudRight ? root.width - width - edgeMargin : edgeMargin
+        y: root.hudBottom ? root.height - height - edgeMargin : edgeMargin
         z: 18
 
-        Column {
-            id: graphControls
-            anchors.left: parent.left
-            anchors.right: parent.right
+        Rectangle {
+            id: graphPanel
             anchors.top: parent.top
-            anchors.margins: 6
-            spacing: 3
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.max(280, Math.min(520, root.width * 0.38))
+            height: Math.max(190, Math.min(340, root.height * 0.28))
+            radius: Kirigami.Units.cornerRadius
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
+            border.width: 1
+            border.color: Kirigami.Theme.textColor
+
+            Item {
+                id: graphArea
+                anchors.fill: parent
+
+                Canvas {
+                    id: graphCanvas
+                    anchors.fill: parent
+                    antialiasing: true
+                    onPaint: {
+                        const ctx = getContext("2d");
+                        ctx.clearRect(0, 0, width, height);
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = Kirigami.Theme.textColor;
+                        ctx.globalAlpha = 0.68;
+                        for (let i = 0; i < root.graphEdges.length; ++i) {
+                            const edge = root.graphEdges[i];
+                            const route = root.graphRoute(edge);
+                            if (route.length < 2) continue;
+                            ctx.beginPath();
+                            ctx.moveTo(route[0].x, route[0].y);
+                            for (let j = 1; j < route.length; ++j) {
+                                ctx.lineTo(route[j].x, route[j].y);
+                            }
+                            ctx.stroke();
+                            if (edge.aToB) root.drawGraphArrow(ctx, route[route.length - 2], route[route.length - 1], 19);
+                            if (edge.bToA) root.drawGraphArrow(ctx, route[1], route[0], 19);
+                        }
+                    }
+                }
+
+                onWidthChanged: Qt.callLater(root.rebuildGraph)
+                onHeightChanged: Qt.callLater(root.rebuildGraph)
+
+                Repeater {
+                    model: KWinComponents.Workspace.desktops
+                    Rectangle {
+                        required property int index
+                        readonly property point panelPosition: root.graphPosition(index)
+                        readonly property Item sourceDesktopItem: root.desktopRepeater.itemAt(index)
+                        readonly property bool current: sourceDesktopItem && sourceDesktopItem.current
+                        x: panelPosition.x - width / 2
+                        y: panelPosition.y - height / 2
+                        width: current ? 42 : 34
+                        height: width
+                        radius: width / 2
+                        color: current ? Kirigami.Theme.highlightColor : Kirigami.Theme.backgroundColor
+                        border.width: current ? 3 : 2
+                        border.color: Kirigami.Theme.textColor
+
+                        PC3.Label {
+                            anchors.centerIn: parent
+                            text: parent.index + 1
+                            color: parent.current ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                            font.bold: parent.current
+                        }
+                    }
+                }
+            }
+
+            HoverHandler {
+                id: graphEscapeHover
+                onHoveredChanged: {
+                    if (hovered) root.escapeHud();
+                }
+            }
+
+            onWidthChanged: Qt.callLater(root.rebuildGraph)
+            onHeightChanged: Qt.callLater(root.rebuildGraph)
+            Component.onCompleted: Qt.callLater(root.rebuildGraph)
+        }
+
+        Rectangle {
+            id: presetBar
+            visible: root.hudMenuVisible
+            anchors.top: graphPanel.bottom
+            anchors.topMargin: topologyHud.gap
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(root.width - 2 * topologyHud.edgeMargin, presetRow.implicitWidth + 2 * Kirigami.Units.smallSpacing)
+            height: presetRow.implicitHeight + 2 * Kirigami.Units.smallSpacing
+            radius: Kirigami.Units.cornerRadius
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
+            border.width: 1
+            border.color: Kirigami.Theme.textColor
 
             Row {
-                anchors.horizontalCenter: parent.horizontalCenter
+                id: presetRow
+                anchors.centerIn: parent
                 spacing: Kirigami.Units.smallSpacing
-
-                PC3.Label {
-                    text: "Topology"
-                    font.bold: true
-                    anchors.verticalCenter: parent.verticalCenter
-                }
 
                 PC3.ComboBox {
                     id: graphLayoutCombo
@@ -573,25 +644,20 @@ Item {
                         root.manager.topologyGraphLayout = currentIndex === 1 ? "loose" : "grid";
                         Qt.callLater(root.rebuildGraph);
                     }
-                    PC3.ToolTip.text: "Graph layout. Grid is the default; Loose DAG uses force-directed placement."
+                    PC3.ToolTip.text: "Graph layout"
                     PC3.ToolTip.visible: hovered
                     PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
-            }
-
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 5
-                opacity: root.manager && root.manager.topologyGraphLayout === "loose" ? 1.0 : 0.45
 
                 PC3.Label {
                     text: "Spread"
                     anchors.verticalCenter: parent.verticalCenter
+                    opacity: root.manager && root.manager.topologyGraphLayout === "loose" ? 1.0 : 0.45
                 }
 
                 QQC2.Slider {
                     id: graphSpreadSlider
-                    width: 145
+                    width: 120
                     from: 0.75
                     to: 2.5
                     stepSize: 0.05
@@ -603,137 +669,40 @@ Item {
                     }
                 }
 
-                PC3.Label {
-                    width: 34
-                    horizontalAlignment: Text.AlignRight
-                    text: (root.manager ? root.manager.topologyGraphSpread : 1.35).toFixed(1) + "x"
-                    anchors.verticalCenter: parent.verticalCenter
+                PC3.ComboBox {
+                    id: presetCombo
+                    width: 140
+                    model: root.presetModel
+                    onActivated: root.loadPreset(currentText)
                 }
-            }
-        }
 
-        Item {
-            id: graphArea
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: graphControls.bottom
-            anchors.bottom: parent.bottom
-            anchors.leftMargin: 4
-            anchors.rightMargin: 4
-            anchors.bottomMargin: 4
-            anchors.topMargin: 2
+                PC3.TextField {
+                    id: presetName
+                    width: 130
+                    placeholderText: "Preset name"
+                    onAccepted: root.savePreset()
+                }
 
-            Canvas {
-                id: graphCanvas
-                anchors.fill: parent
-                antialiasing: true
-                onPaint: {
-                    const ctx = getContext("2d");
-                    ctx.clearRect(0, 0, width, height);
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = Kirigami.Theme.textColor;
-                    ctx.globalAlpha = 0.76;
-                    for (let i = 0; i < root.graphEdges.length; ++i) {
-                        const edge = root.graphEdges[i];
-                        const route = root.graphRoute(edge);
-                        if (route.length < 2) continue;
-                        ctx.beginPath();
-                        ctx.moveTo(route[0].x, route[0].y);
-                        for (let j = 1; j < route.length; ++j) {
-                            ctx.lineTo(route[j].x, route[j].y);
-                        }
-                        ctx.stroke();
-                        if (edge.aToB) root.drawGraphArrow(ctx, route[route.length - 2], route[route.length - 1], 15);
-                        if (edge.bToA) root.drawGraphArrow(ctx, route[1], route[0], 15);
+                PC3.Button {
+                    text: "Save"
+                    onClicked: root.savePreset()
+                }
+
+                PC3.Button {
+                    text: "Delete"
+                    onClicked: {
+                        root.presetStatus = root.manager.removePreset(presetCombo.currentText);
+                        root.refreshPresets();
                     }
                 }
-            }
 
-            onWidthChanged: Qt.callLater(root.rebuildGraph)
-            onHeightChanged: Qt.callLater(root.rebuildGraph)
-
-            Repeater {
-                model: root.desktopRepeater.count
-                Rectangle {
-                    required property int index
-                    readonly property point panelPosition: root.graphPosition(index)
-                    x: panelPosition.x - width / 2
-                    y: panelPosition.y - height / 2
-                    width: 30
-                    height: 30
-                    radius: 15
-                    readonly property Item sourceDesktopItem: root.desktopRepeater.itemAt(index)
-                    color: sourceDesktopItem && sourceDesktopItem.current
-                        ? Kirigami.Theme.highlightColor : Kirigami.Theme.backgroundColor
-                    border.width: 2
-                    border.color: Kirigami.Theme.textColor
-
-                    PC3.Label {
-                        anchors.centerIn: parent
-                        text: parent.index + 1
-                        font.bold: true
-                    }
+                PC3.Button {
+                    text: "×"
+                    onClicked: root.hudMenuVisible = false
+                    PC3.ToolTip.text: "Close controls"
+                    PC3.ToolTip.visible: hovered
+                    PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
-            }
-        }
-
-        onWidthChanged: Qt.callLater(root.rebuildGraph)
-        onHeightChanged: Qt.callLater(root.rebuildGraph)
-        Component.onCompleted: Qt.callLater(root.rebuildGraph)
-    }
-
-    // Keep the preset toolbar away from the top-edge/corner topology handles.
-    // It now lives below the graph panel instead of spanning the top desktop row.
-    Rectangle {
-        id: presetBar
-        anchors.top: graphPanel.bottom
-        anchors.right: parent.right
-        anchors.topMargin: Kirigami.Units.smallSpacing
-        anchors.rightMargin: Kirigami.Units.largeSpacing
-        width: Math.min(parent.width - 2 * Kirigami.Units.largeSpacing, presetRow.implicitWidth + 2 * Kirigami.Units.smallSpacing)
-        height: presetRow.implicitHeight + 2 * Kirigami.Units.smallSpacing
-        radius: Kirigami.Units.cornerRadius
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
-        border.width: 1
-        border.color: Kirigami.Theme.textColor
-        z: 20
-
-        Row {
-            id: presetRow
-            anchors.centerIn: parent
-            spacing: Kirigami.Units.smallSpacing
-
-            PC3.ComboBox {
-                id: presetCombo
-                width: 140
-                model: root.presetModel
-                onActivated: root.loadPreset(currentText)
-            }
-
-            PC3.TextField {
-                id: presetName
-                width: 130
-                placeholderText: "Preset name"
-                onAccepted: root.savePreset()
-            }
-
-            PC3.Button {
-                text: "Save"
-                onClicked: root.savePreset()
-            }
-
-            PC3.Button {
-                text: "Delete"
-                onClicked: {
-                    root.presetStatus = root.manager.removePreset(presetCombo.currentText);
-                    root.refreshPresets();
-                }
-            }
-
-            PC3.Label {
-                width: 150
-                elide: Text.ElideRight
-                text: root.presetStatus === "" ? (root.manager.activeProfile === "" ? "Custom" : root.manager.activeProfile) : root.presetStatus
             }
         }
     }
