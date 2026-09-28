@@ -663,6 +663,14 @@ void SlideEffect::desktopChanged(VirtualDesktop *old, VirtualDesktop *current, E
     }
     if (slideScreenResult.iterator->isToposActive()) {
         slideScreenResult.iterator->finishedSwitching();
+        // A completed traversal with no settle hint can leave this SlideEffect
+        // registered as the active full-screen effect even though every screen
+        // is already inactive. That blocks Overview's zoom-out gesture until a
+        // later desktop switch happens to wake Slide again. Clear the global
+        // effect immediately once the last Topos screen has finished.
+        if (!isActive()) {
+            finishedSwitching();
+        }
         return;
     }
     slideScreenResult.iterator->desktopChanged(old, current, with);
@@ -747,6 +755,12 @@ void SlideEffect::desktopChangingCancelled()
         } else {
             it->desktopChangingCancelled();
         }
+    }
+    // desktopChangingCancelled() can synchronously put every screen back into
+    // Inactive without scheduling another frame. Release the full-screen effect
+    // here instead of waiting for postPaintScreen(), which may never run.
+    if (!isActive()) {
+        finishedSwitching();
     }
 }
 

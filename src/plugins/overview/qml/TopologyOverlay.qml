@@ -27,6 +27,7 @@ Item {
     property var graphEdges: []
     property int graphEpoch: 0
     property bool hudMenuVisible: true
+    property bool hudVisible: true
     property bool hudRight: true
     property bool hudBottom: false
     readonly property bool pairing: manager && manager.selectedDesktop !== "" && manager.selectedPort >= 0
@@ -307,6 +308,37 @@ Item {
         return positions;
     }
 
+    function fitGraphPositions(points, w, h, margin) {
+        if (!points || points.length === 0) return [];
+        let minX = points[0].x;
+        let maxX = points[0].x;
+        let minY = points[0].y;
+        let maxY = points[0].y;
+        for (let i = 1; i < points.length; ++i) {
+            minX = Math.min(minX, points[i].x);
+            maxX = Math.max(maxX, points[i].x);
+            minY = Math.min(minY, points[i].y);
+            maxY = Math.max(maxY, points[i].y);
+        }
+        const spanX = maxX - minX;
+        const spanY = maxY - minY;
+        if (spanX < 1 && spanY < 1) return graphGridPositions(w, h, points.length);
+        const usableW = Math.max(1, w - 2 * margin);
+        const usableH = Math.max(1, h - 2 * margin);
+        const scaleX = spanX > 0 ? usableW / spanX : 1e9;
+        const scaleY = spanY > 0 ? usableH / spanY : 1e9;
+        const scale = Math.min(scaleX, scaleY);
+        const contentW = spanX * scale;
+        const contentH = spanY * scale;
+        const offsetX = (w - contentW) / 2 - minX * scale;
+        const offsetY = (h - contentH) / 2 - minY * scale;
+        const result = [];
+        for (let i = 0; i < points.length; ++i) {
+            result.push({ x: points[i].x * scale + offsetX, y: points[i].y * scale + offsetY });
+        }
+        return result;
+    }
+
     function rebuildGraph() {
         if (!graphPanel) return;
         const n = KWinComponents.Workspace.desktops.length;
@@ -338,9 +370,12 @@ Item {
         const w = graphArea ? graphArea.width : graphPanel.width;
         const h = graphArea ? graphArea.height : graphPanel.height;
         const loose = root.manager && root.manager.topologyGraphLayout === "loose";
-        root.graphPositions = loose
+        const rawPositions = loose
             ? graphLoosePositions(w, h, n, edges)
             : graphGridPositions(w, h, n);
+        root.graphPositions = loose
+            ? fitGraphPositions(rawPositions, w, h, 34)
+            : rawPositions;
         root.graphEdges = edges;
         root.graphEpoch++;
         graphCanvas.requestPaint();
@@ -510,7 +545,7 @@ Item {
     }
     onVisibleChanged: {
         if (!visible && pairing) cancelPairing();
-        if (visible) hudMenuVisible = true;
+        if (visible) { hudMenuVisible = true; hudVisible = true; }
     }
 
     Connections {
@@ -527,6 +562,7 @@ Item {
 
     Item {
         id: topologyHud
+        visible: root.hudVisible
         readonly property real edgeMargin: Kirigami.Units.largeSpacing
         readonly property real gap: Kirigami.Units.smallSpacing
         width: Math.max(graphPanel.width, presetBar.visible ? presetBar.width : 0)
@@ -698,8 +734,8 @@ Item {
 
                 PC3.Button {
                     text: "×"
-                    onClicked: root.hudMenuVisible = false
-                    PC3.ToolTip.text: "Close controls"
+                    onClicked: root.hudVisible = false
+                    PC3.ToolTip.text: "Close topology map"
                     PC3.ToolTip.visible: hovered
                     PC3.ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
