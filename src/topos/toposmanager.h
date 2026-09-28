@@ -5,6 +5,8 @@
 
 #include "topostypes.h"
 
+#include <kwin_export.h>
+
 #include <QObject>
 #include <QPointF>
 #include <QVariantMap>
@@ -60,7 +62,7 @@ struct ToposTransitionHint
     qreal endProgress = 1;
 };
 
-class ToposManager : public QObject
+class KWIN_EXPORT ToposManager : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)

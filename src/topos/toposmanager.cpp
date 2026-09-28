@@ -241,11 +241,11 @@ ToposResolvedArc ToposManager::resolve(VirtualDesktop *desktop, ToposPort port, 
     const auto overrideIt = m_overrides.constFind(endpoint);
     if (overrideIt != m_overrides.cend()) {
         if (!overrideIt.value()) {
-            return ToposResolvedArc{.exists = false, .custom = true};
+            return ToposResolvedArc{.exists = false, .custom = true, .target = nullptr, .transport = {}};
         }
         VirtualDesktop *target = m_desktops->desktopForId(overrideIt.value()->targetDesktopId);
         if (!target) {
-            return ToposResolvedArc{.exists = false, .custom = true};
+            return ToposResolvedArc{.exists = false, .custom = true, .target = nullptr, .transport = {}};
         }
         return ToposResolvedArc{.exists = true,
                                 .custom = true,
@@ -761,7 +761,7 @@ bool ToposManager::redo(int count)
     if (count < 1 || !canRedo()) {
         return false;
     }
-    applyHistoryEntry(std::min(m_history.size() - 1, m_historyCursor + count));
+    applyHistoryEntry(std::min(static_cast<int>(m_history.size()) - 1, m_historyCursor + count));
     return true;
 }
 
@@ -1132,7 +1132,7 @@ ToposManager::ProfileEntry ToposManager::parseProfile(const QString &path) const
     QSet<QString> seenAliases;
     bool versionSeen = false;
 
-    const QRegularExpression desktopRe(QStringLiteral(R"(^desktop\s+(\S+)\s+"((?:\\.|[^"])*)"\s*$)"));
+    const QRegularExpression desktopRe(QStringLiteral(R"re(^desktop\s+(\S+)\s+"((?:\\.|[^"])*)"\s*$)re"));
     const QRegularExpression arcRe(QStringLiteral(R"(^(\S+):(N|NE|E|SE|S|SW|W|NW)\s*(->|<->)\s*(\S+)(?:\s+rotate=(-?\d+))?(?:\s+mirror=(true|false))?\s*$)"), QRegularExpression::CaseInsensitiveOption);
 
     for (int index = 0; index < lines.size(); ++index) {
