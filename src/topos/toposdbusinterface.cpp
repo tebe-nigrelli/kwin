@@ -69,6 +69,10 @@ bool ToposDBusInterface::showHandles() const { return m_manager->showHandles(); 
 void ToposDBusInterface::setShowHandles(bool show) { m_manager->setShowHandles(show); }
 bool ToposDBusInterface::showBridgePreview() const { return m_manager->showBridgePreview(); }
 void ToposDBusInterface::setShowBridgePreview(bool show) { m_manager->setShowBridgePreview(show); }
+QString ToposDBusInterface::topologyGraphLayout() const { return m_manager->topologyGraphLayout(); }
+void ToposDBusInterface::setTopologyGraphLayout(const QString &layout) { m_manager->setTopologyGraphLayout(layout); }
+double ToposDBusInterface::topologyGraphSpread() const { return m_manager->topologyGraphSpread(); }
+void ToposDBusInterface::setTopologyGraphSpread(double spread) { m_manager->setTopologyGraphSpread(spread); }
 
 QStringList ToposDBusInterface::desktopNames() const
 {

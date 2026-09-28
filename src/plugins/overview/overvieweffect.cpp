@@ -47,10 +47,26 @@ OverviewEffect::OverviewEffect()
     gridGesture->addTouchpadSwipeGesture(SwipeDirection::Down, 4);
     gridGesture->addTouchscreenSwipeGesture(SwipeDirection::Down, 3);
 
+    // A partially completed topology swipe must never keep the slide effect
+    // active while Overview/Grid View starts. Clearing it here also prevents a
+    // stale traversal from swallowing a later zoom-out gesture.
+    const auto cancelToposTraversal = []() {
+        ToposManager *topos = VirtualDesktopManager::self()->topos();
+        if (!topos) {
+            return;
+        }
+        for (LogicalOutput *output : effects->screens()) {
+            topos->cancelTraversal(output);
+        }
+    };
+
     connect(m_overviewState, &EffectTogglableState::inProgressChanged, this, &OverviewEffect::overviewGestureInProgressChanged);
     connect(m_overviewState, &EffectTogglableState::partialActivationFactorChanged, this, &OverviewEffect::overviewPartialActivationFactorChanged);
 
-    connect(m_overviewState, &EffectTogglableState::statusChanged, this, [this](EffectTogglableState::Status status) {
+    connect(m_overviewState, &EffectTogglableState::statusChanged, this, [this, cancelToposTraversal](EffectTogglableState::Status status) {
+        if (status == EffectTogglableState::Status::Activating) {
+            cancelToposTraversal();
+        }
         if (status == EffectTogglableState::Status::Activating || status == EffectTogglableState::Status::Active) {
             m_searchText = QString();
             setRunning(true);
@@ -68,7 +84,10 @@ OverviewEffect::OverviewEffect()
         }
     });
 
-    connect(m_transitionState, &EffectTogglableState::statusChanged, this, [this](EffectTogglableState::Status status) {
+    connect(m_transitionState, &EffectTogglableState::statusChanged, this, [this, cancelToposTraversal](EffectTogglableState::Status status) {
+        if (status == EffectTogglableState::Status::Activating) {
+            cancelToposTraversal();
+        }
         if (status == EffectTogglableState::Status::Activating || status == EffectTogglableState::Status::Active) {
             m_overviewState->stop();
         }
@@ -83,7 +102,10 @@ OverviewEffect::OverviewEffect()
         }
     });
 
-    connect(m_gridState, &EffectTogglableState::statusChanged, this, [this](EffectTogglableState::Status status) {
+    connect(m_gridState, &EffectTogglableState::statusChanged, this, [this, cancelToposTraversal](EffectTogglableState::Status status) {
+        if (status == EffectTogglableState::Status::Activating) {
+            cancelToposTraversal();
+        }
         if (status == EffectTogglableState::Status::Activating || status == EffectTogglableState::Status::Active) {
             m_searchText = QString();
             setRunning(true);

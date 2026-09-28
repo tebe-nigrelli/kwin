@@ -30,6 +30,8 @@ class ToposDBusInterface : public QObject, protected QDBusContext
     Q_PROPERTY(double settleThreshold READ settleThreshold WRITE setSettleThreshold NOTIFY stateChanged)
     Q_PROPERTY(bool showHandles READ showHandles WRITE setShowHandles NOTIFY stateChanged)
     Q_PROPERTY(bool showBridgePreview READ showBridgePreview WRITE setShowBridgePreview NOTIFY stateChanged)
+    Q_PROPERTY(QString topologyGraphLayout READ topologyGraphLayout WRITE setTopologyGraphLayout NOTIFY stateChanged)
+    Q_PROPERTY(double topologyGraphSpread READ topologyGraphSpread WRITE setTopologyGraphSpread NOTIFY stateChanged)
     Q_PROPERTY(QStringList desktopNames READ desktopNames NOTIFY desktopSignatureChanged)
 
 public:
@@ -56,6 +58,10 @@ public:
     void setShowHandles(bool show);
     bool showBridgePreview() const;
     void setShowBridgePreview(bool show);
+    QString topologyGraphLayout() const;
+    void setTopologyGraphLayout(const QString &layout);
+    double topologyGraphSpread() const;
+    void setTopologyGraphSpread(double spread);
     QStringList desktopNames() const;
 
 public Q_SLOTS:

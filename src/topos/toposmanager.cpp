@@ -899,6 +899,36 @@ void ToposManager::setShowBridgePreview(bool show)
     Q_EMIT settingsChanged();
 }
 
+QString ToposManager::topologyGraphLayout() const
+{
+    return m_topologyGraphLayout;
+}
+
+void ToposManager::setTopologyGraphLayout(const QString &layout)
+{
+    const QString normalized = layout.compare(QStringLiteral("loose"), Qt::CaseInsensitive) == 0
+        ? QStringLiteral("loose")
+        : QStringLiteral("grid");
+    if (m_topologyGraphLayout == normalized) return;
+    m_topologyGraphLayout = normalized;
+    saveSettings();
+    Q_EMIT settingsChanged();
+}
+
+qreal ToposManager::topologyGraphSpread() const
+{
+    return m_topologyGraphSpread;
+}
+
+void ToposManager::setTopologyGraphSpread(qreal spread)
+{
+    spread = std::clamp(spread, 0.75, 2.5);
+    if (qFuzzyCompare(m_topologyGraphSpread, spread)) return;
+    m_topologyGraphSpread = spread;
+    saveSettings();
+    Q_EMIT settingsChanged();
+}
+
 QVariantMap ToposManager::edgeInfo(const QString &desktopId, int portValue) const
 {
     QVariantMap result;
@@ -1566,6 +1596,11 @@ void ToposManager::loadSettings()
     m_settleThreshold = std::clamp(settings.value(QStringLiteral("General/SettleThreshold"), 0.25).toDouble(), 0.05, 0.95);
     m_showHandles = settings.value(QStringLiteral("General/ShowHandles"), true).toBool();
     m_showBridgePreview = settings.value(QStringLiteral("General/ShowBridgePreview"), true).toBool();
+    const QString graphLayout = settings.value(QStringLiteral("General/TopologyGraphLayout"), QStringLiteral("grid")).toString();
+    m_topologyGraphLayout = graphLayout.compare(QStringLiteral("loose"), Qt::CaseInsensitive) == 0
+        ? QStringLiteral("loose")
+        : QStringLiteral("grid");
+    m_topologyGraphSpread = std::clamp(settings.value(QStringLiteral("General/TopologyGraphSpread"), 1.35).toDouble(), 0.75, 2.5);
 }
 
 void ToposManager::saveSettings() const
@@ -1577,6 +1612,8 @@ void ToposManager::saveSettings() const
     settings.setValue(QStringLiteral("General/SettleThreshold"), m_settleThreshold);
     settings.setValue(QStringLiteral("General/ShowHandles"), m_showHandles);
     settings.setValue(QStringLiteral("General/ShowBridgePreview"), m_showBridgePreview);
+    settings.setValue(QStringLiteral("General/TopologyGraphLayout"), m_topologyGraphLayout);
+    settings.setValue(QStringLiteral("General/TopologyGraphSpread"), m_topologyGraphSpread);
 }
 
 void ToposManager::saveHistory() const
@@ -1806,23 +1843,66 @@ ToposTraversalVisualState ToposManager::traversalVisualState(LogicalOutput *outp
         visual.progress = std::clamp(it->segmentProgress, 0.0, 1.0);
     }
 
-    if (it->blocked && it->activePort) {
-        visual.offset = portGridVector(*it->activePort) * visual.progress;
-    } else {
-        visual.offset = it->residual;
+    // Keep one stable screen-space coordinate system for the whole gesture.
+    // Previously every completed crossing re-anchored the new cursor at (0,0),
+    // which made the rendered neighborhood visibly jump at exactly the moment
+    // the anchor desktop changed. Reconstruct the cursor position from the path
+    // and map each local topology vector back into the original gesture frame.
+    QPointF cursorPosition;
+    ToposTransport cursorFrame;
+    QVector<ToposTraversalPlacement> pathPlacements;
+    if (it->origin) {
+        pathPlacements.append(ToposTraversalPlacement{it->origin, QPointF()});
+    }
+    for (const ToposStep &step : std::as_const(it->path)) {
+        cursorPosition += applyTransport(portGridVector(step.port), inverseTransport(cursorFrame));
+        cursorFrame = composeTransport(cursorFrame, step.transport);
+        if (VirtualDesktop *desktop = m_desktops->desktopForId(step.to)) {
+            pathPlacements.append(ToposTraversalPlacement{desktop, cursorPosition});
+        }
     }
 
-    // Paint the current desktop and every directly reachable neighbor at once.
-    // This makes the gesture a continuous 2-D surface instead of snapping
-    // between one source/target pair at a time.
-    visual.placements.append(ToposTraversalPlacement{it->cursor, QPointF(0, 0)});
+    QPointF localOffset = it->residual;
+    if (it->blocked && it->activePort) {
+        localOffset = portGridVector(*it->activePort) * visual.progress;
+    }
+    visual.offset = cursorPosition + applyTransport(localOffset, inverseTransport(cursorFrame));
+
+    const auto appendPlacement = [&visual](VirtualDesktop *desktop, const QPointF &position) {
+        if (!desktop) return;
+        for (const ToposTraversalPlacement &existing : std::as_const(visual.placements)) {
+            if (existing.desktop == desktop
+                && std::abs(existing.position.x() - position.x()) < 0.001
+                && std::abs(existing.position.y() - position.y()) < 0.001) {
+                return;
+            }
+        }
+        visual.placements.append(ToposTraversalPlacement{desktop, position});
+    };
+
+    // Retain traversed desktops near the viewport so the old anchor remains
+    // visible as it leaves the screen. This is what makes multi-desktop swipes
+    // continuous across anchor changes instead of replacing one neighborhood
+    // with another in a single frame.
+    for (const ToposTraversalPlacement &placement : std::as_const(pathPlacements)) {
+        const QPointF delta = placement.position - visual.offset;
+        if (std::abs(delta.x()) <= 2.0 && std::abs(delta.y()) <= 2.0) {
+            appendPlacement(placement.desktop, placement.position);
+        }
+    }
+    appendPlacement(it->cursor, cursorPosition);
+
+    // Paint every directly reachable neighbor in the same stable coordinate
+    // frame. Diagonal vectors stay a full screen apart on both axes.
     for (int p = 0; p < 8; ++p) {
         const ToposPort port = static_cast<ToposPort>(p);
         const ToposResolvedArc arc = resolve(it->cursor, port, m_desktops->isNavigationWrappingAround());
         if (!arc.exists || !arc.target || arc.target == it->cursor) {
             continue;
         }
-        visual.placements.append(ToposTraversalPlacement{arc.target, portGridVector(port)});
+        const QPointF position = cursorPosition
+            + applyTransport(portGridVector(port), inverseTransport(cursorFrame));
+        appendPlacement(arc.target, position);
     }
     return visual;
 }
@@ -1846,13 +1926,20 @@ VirtualDesktop *ToposManager::finishTraversal(LogicalOutput *output)
         hint.startProgress = visual.progress;
         hint.startOffset = visual.offset;
         hint.placements = visual.placements;
+        QPointF cursorPosition;
+        ToposTransport cursorFrame;
+        for (const ToposStep &step : std::as_const(state.path)) {
+            cursorPosition += applyTransport(portGridVector(step.port), inverseTransport(cursorFrame));
+            cursorFrame = composeTransport(cursorFrame, step.transport);
+        }
+        const QPointF visualDirection = applyTransport(portGridVector(*state.activePort), inverseTransport(cursorFrame));
         if (!state.blocked && state.segmentTarget && state.segmentProgress >= m_settleThreshold) {
             finalDesktop = state.segmentTarget;
             hint.endProgress = 1.0;
-            hint.endOffset = portGridVector(*state.activePort);
+            hint.endOffset = cursorPosition + visualDirection;
         } else {
             hint.endProgress = 0.0;
-            hint.endOffset = QPointF();
+            hint.endOffset = cursorPosition;
         }
         m_transitionHints.insert(output, hint);
     }

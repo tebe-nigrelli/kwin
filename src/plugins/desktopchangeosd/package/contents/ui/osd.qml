@@ -29,7 +29,12 @@ PlasmaCore.Window {
 
         function loadConfig() {
             animationDuration = KWin.readConfig("PopupHideDelay", 1000);
-            showGraph = KWin.readConfig("TextOnly", "false") !== "true";
+            // Topos uses the graph as the desktop-layout indicator. Keep it
+            // visible whenever the topology manager is available, even if an
+            // older TextOnly setting was left behind in kwinrc.
+            showGraph = Workspace.topos && Workspace.topos.ready
+                ? true
+                : KWin.readConfig("TextOnly", "false") !== "true";
         }
 
         implicitWidth: showGraph ? topologyGraph.width : Math.ceil(textElement.implicitWidth)

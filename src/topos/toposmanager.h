@@ -88,6 +88,8 @@ class KWIN_EXPORT ToposManager : public QObject
     Q_PROPERTY(qreal settleThreshold READ settleThreshold WRITE setSettleThreshold NOTIFY settingsChanged)
     Q_PROPERTY(bool showHandles READ showHandles WRITE setShowHandles NOTIFY settingsChanged)
     Q_PROPERTY(bool showBridgePreview READ showBridgePreview WRITE setShowBridgePreview NOTIFY settingsChanged)
+    Q_PROPERTY(QString topologyGraphLayout READ topologyGraphLayout WRITE setTopologyGraphLayout NOTIFY settingsChanged)
+    Q_PROPERTY(qreal topologyGraphSpread READ topologyGraphSpread WRITE setTopologyGraphSpread NOTIFY settingsChanged)
     Q_PROPERTY(QString selectedDesktop READ selectedDesktop NOTIFY selectionChanged)
     Q_PROPERTY(int selectedPort READ selectedPort NOTIFY selectionChanged)
 
@@ -142,6 +144,10 @@ public:
     void setShowHandles(bool show);
     bool showBridgePreview() const;
     void setShowBridgePreview(bool show);
+    QString topologyGraphLayout() const;
+    void setTopologyGraphLayout(const QString &layout);
+    qreal topologyGraphSpread() const;
+    void setTopologyGraphSpread(qreal spread);
 
     QString stateJson() const;
     QString graphJson() const;
@@ -261,6 +267,8 @@ private:
     qreal m_settleThreshold = 0.25;
     bool m_showHandles = true;
     bool m_showBridgePreview = true;
+    QString m_topologyGraphLayout = QStringLiteral("grid");
+    qreal m_topologyGraphSpread = 1.35;
 
     QString m_activeProfile;
     QString m_lastLoadedProfile;

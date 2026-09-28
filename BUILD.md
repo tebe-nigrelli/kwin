@@ -71,3 +71,8 @@ cache:
 ```bash
 sudo pacman -U /var/cache/pacman/pkg/kwin-<version>-x86_64.pkg.tar.zst
 ```
+
+# All in One
+```
+rsync -a     --exclude='.git/'     --exclude='.build/'     --exclude='build/'     --exclude='repo.zip'     /path/to/kwin/     ~/build/topos/kwin/src/kwin-6.7.5/ && cd ~/build/topos/kwin/ && makepkg -eLsf && sudo pacman -U ./kwin-6.7.5-*.pkg.tar.zst && kwin_wayland --replace
+```
