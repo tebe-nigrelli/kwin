@@ -16,6 +16,7 @@
 #include "outline.h"
 #include "scripting_logging.h"
 #include "tiles/tilemanager.h"
+#include "topos/toposmanager.h"
 #include "virtualdesktops.h"
 #include "window.h"
 #include "workspace.h"
@@ -69,6 +70,11 @@ VirtualDesktop *WorkspaceWrapper::currentDesktop() const
 QList<VirtualDesktop *> WorkspaceWrapper::desktops() const
 {
     return VirtualDesktopManager::self()->desktops();
+}
+
+QObject *WorkspaceWrapper::topos() const
+{
+    return VirtualDesktopManager::self()->topos();
 }
 
 void WorkspaceWrapper::setCurrentDesktop(VirtualDesktop *desktop)
