@@ -223,6 +223,8 @@ target_sources(kwin PRIVATE
     tiles/tile.cpp
     tiles/tilemanager.cpp
     touch_input.cpp
+    topos/toposdbusinterface.cpp
+    topos/toposmanager.cpp
     useractionprompt.cpp
     useractions.cpp
     utils/svgcursorreader.cpp
@@ -350,6 +352,7 @@ qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.xml dbusinterface.h KWin::DBusIn
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.kwin.Compositing.xml dbusinterface.h KWin::CompositorDBusInterface)
 qt_add_dbus_adaptor(kwin_dbus_SRCS ${kwin_effects_dbus_xml} effect/effecthandler.h KWin::EffectsHandler)
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.VirtualDesktopManager.xml dbusinterface.h KWin::VirtualDesktopManagerDBusInterface)
+qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.Topos.xml topos/toposdbusinterface.h KWin::ToposDBusInterface)
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.Session.xml sm.h KWin::SessionManager)
 qt_add_dbus_adaptor(kwin_dbus_SRCS org.kde.KWin.Plugins.xml dbusinterface.h KWin::PluginManagerDBusInterface)
 qt_add_dbus_interface(kwin_dbus_SRCS org.freedesktop.DBus.Properties.xml dbusproperties_interface)
@@ -379,6 +382,7 @@ add_subdirectory(plugins)
 add_subdirectory(utils)
 add_subdirectory(wayland)
 add_subdirectory(wayland-client)
+add_subdirectory(toposctl)
 
 if (KWIN_BUILD_X11)
     add_subdirectory(xwayland)
@@ -467,6 +471,7 @@ endif()
 install(
     FILES
         org.kde.KWin.VirtualDesktopManager.xml
+        org.kde.KWin.Topos.xml
         org.kde.KWin.xml
         org.kde.kwin.Compositing.xml
         org.kde.kwin.Effects.xml

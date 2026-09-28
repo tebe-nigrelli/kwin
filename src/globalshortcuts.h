@@ -13,6 +13,7 @@
 #include "core/inputdevice.h"
 
 #include <QKeySequence>
+#include <QPointF>
 
 #include <memory>
 
@@ -68,7 +69,7 @@ public:
      */
     void registerAxisShortcut(QAction *action, Qt::KeyboardModifiers modifiers, PointerAxisDirection axis);
 
-    void registerTouchpadSwipe(SwipeDirection direction, uint32_t fingerCount, QAction *action, std::function<void(qreal)> progressCallback = {});
+    void registerTouchpadSwipe(SwipeDirection direction, uint32_t fingerCount, QAction *action, std::function<void(qreal)> progressCallback = {}, std::function<void(const QPointF &)> deltaCallback = {});
     void registerTouchpadSwipe(SwipeGesture *swipeGesture);
     void registerTouchpadPinch(PinchDirection direction, uint32_t fingerCount, QAction *action, std::function<void(qreal)> progressCallback = {});
     void registerTouchpadPinch(PinchGesture *pinchGesture);
@@ -158,6 +159,7 @@ struct RealtimeFeedbackSwipeShortcut
     DeviceType device;
     SwipeDirection direction;
     std::function<void(qreal)> progressCallback;
+    std::function<void(const QPointF &)> deltaCallback;
     uint fingerCount;
 
     template<typename T>

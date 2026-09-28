@@ -24,6 +24,10 @@ qt6_add_qml_module(overview
         DesktopBar.qml
         DesktopView.qml
         Main.qml
+        TopologyBridge.qml
+        TopologyOverlay.qml
+        TopologyPort.qml
+        TopologyTarget.qml
 )
 
 target_link_libraries(overview PRIVATE

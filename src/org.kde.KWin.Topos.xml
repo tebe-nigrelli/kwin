@@ -1,0 +1,52 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.KWin.Topos">
+    <property name="apiVersion" type="i" access="read"/>
+    <property name="ready" type="b" access="read"/>
+    <property name="revision" type="t" access="read"/>
+    <property name="activeProfile" type="s" access="read"/>
+    <property name="lastLoadedProfile" type="s" access="read"/>
+    <property name="dirty" type="b" access="read"/>
+    <property name="canUndo" type="b" access="read"/>
+    <property name="canRedo" type="b" access="read"/>
+    <property name="historyLimit" type="i" access="readwrite"/>
+    <property name="persistHistory" type="b" access="readwrite"/>
+    <property name="gestureDistance" type="i" access="readwrite"/>
+    <property name="settleThreshold" type="d" access="readwrite"/>
+    <property name="showHandles" type="b" access="readwrite"/>
+    <property name="showBridgePreview" type="b" access="readwrite"/>
+    <property name="desktopNames" type="as" access="read"/>
+
+    <method name="Reset"><arg type="b" direction="out"/></method>
+    <method name="ApplyBuiltin"><arg name="name" type="s" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="ListBuiltins"><arg type="as" direction="out"/></method>
+    <method name="ListProfiles"><arg type="as" direction="out"/></method>
+    <method name="ListProfilesAll"><arg type="as" direction="out"/></method>
+    <method name="LoadProfile"><arg name="name" type="s" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="SaveProfile"><arg name="name" type="s" direction="in"/><arg name="overwrite" type="b" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="RenameProfile"><arg name="oldName" type="s" direction="in"/><arg name="newName" type="s" direction="in"/><arg name="overwrite" type="b" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="DeleteProfile"><arg name="name" type="s" direction="in"/><arg type="b" direction="out"/></method>
+
+    <method name="SetArc">
+      <arg name="source" type="s" direction="in"/><arg name="port" type="s" direction="in"/><arg name="target" type="s" direction="in"/>
+      <arg name="bidirectional" type="b" direction="in"/><arg name="rotationSteps" type="i" direction="in"/><arg name="mirrored" type="b" direction="in"/><arg type="b" direction="out"/>
+    </method>
+    <method name="BlockArc"><arg name="source" type="s" direction="in"/><arg name="port" type="s" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="RestoreArc"><arg name="source" type="s" direction="in"/><arg name="port" type="s" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="CollapseVertex"><arg name="source" type="s" direction="in"/><arg name="destination" type="s" direction="in"/><arg type="b" direction="out"/></method>
+
+    <method name="Undo"><arg name="count" type="i" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="Redo"><arg name="count" type="i" direction="in"/><arg type="b" direction="out"/></method>
+    <method name="ClearHistory"/>
+    <method name="GotoHistory"><arg name="index" type="i" direction="in"/><arg type="b" direction="out"/></method>
+
+    <method name="GetState"><arg type="s" direction="out"/></method>
+    <method name="GetGraph"><arg type="s" direction="out"/></method>
+    <method name="GetHistory"><arg type="s" direction="out"/></method>
+
+    <signal name="StateChanged"/>
+    <signal name="ProfilesChanged"/>
+    <signal name="HistoryChanged"/>
+    <signal name="DesktopSignatureChanged"/>
+  </interface>
+</node>

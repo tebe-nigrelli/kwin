@@ -769,6 +769,14 @@ FocusScope {
 
         }
 
+        TopologyOverlay {
+            anchors.fill: parent
+            manager: effect.topos
+            desktopRepeater: allDesktopHeaps
+            gridValue: container.gridVal
+            overviewValue: container.overviewVal
+        }
+
     }
 
     Loader {
