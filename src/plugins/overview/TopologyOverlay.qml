@@ -35,12 +35,13 @@ Item {
     function mappedRect(item) {
         if (!item) return Qt.rect(0, 0, 0, 0);
         // mapToItem() itself does not expose every transform dependency to the
-        // binding engine. Reading them here keeps the handles glued to the
-        // desktop while Grid View animates or resizes.
-        const dependencyX = 0 * (gridValue + overviewValue + item.x + item.y
-                                 + item.width + item.height + item.deltaColumn + item.deltaRow
-                                 + root.width + root.height + root.overlayEpoch);
-        const p1 = item.mapToItem(root, dependencyX, 0);
+        // binding engine. overlayEpoch is advanced every rendered frame while
+        // Grid View is visible, which keeps the handles glued to animated cards.
+        // Do not read deltaColumn/deltaRow from topologyAnchorItem: the anchor is
+        // backgroundArea and those properties live on its parent. Reading the
+        // missing properties produced NaN geometry and made most ports disappear.
+        root.overlayEpoch;
+        const p1 = item.mapToItem(root, 0, 0);
         const p2 = item.mapToItem(root, item.width, 0);
         const p3 = item.mapToItem(root, 0, item.height);
         const p4 = item.mapToItem(root, item.width, item.height);
