@@ -7,37 +7,35 @@ Item {
     required property QtObject manager
     required property string desktopId
     required property string desktopName
+    property bool accepting: false
+    property bool bidirectional: false
 
-    width: 112
-    height: 112
+    width: 136
+    height: 136
     Accessible.role: Accessible.Button
     Accessible.name: "Topology target " + desktopName
 
     Rectangle {
         anchors.fill: parent
         radius: width / 2
-        color: "transparent"
-        border.width: 2
-        border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.75)
+        color: Qt.rgba(Kirigami.Theme.positiveTextColor.r,
+                       Kirigami.Theme.positiveTextColor.g,
+                       Kirigami.Theme.positiveTextColor.b,
+                       root.accepting && !root.bidirectional ? 0.48 : 0.28)
+        border.width: root.accepting ? 4 : 3
+        border.color: Kirigami.Theme.positiveTextColor
     }
 
     Rectangle {
         anchors.centerIn: parent
-        width: 64
-        height: 64
-        radius: 32
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.22)
-        border.width: 2
+        width: 80
+        height: 80
+        radius: width / 2
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r,
+                       Kirigami.Theme.highlightColor.g,
+                       Kirigami.Theme.highlightColor.b,
+                       root.accepting && root.bidirectional ? 0.72 : 0.42)
+        border.width: root.accepting && root.bidirectional ? 4 : 3
         border.color: Kirigami.Theme.highlightColor
-    }
-
-    TapHandler {
-        acceptedButtons: Qt.LeftButton
-        onTapped: (eventPoint) => {
-            const dx = eventPoint.position.x - root.width / 2;
-            const dy = eventPoint.position.y - root.height / 2;
-            const bidirectional = Math.sqrt(dx * dx + dy * dy) <= 32;
-            root.manager.linkSelectedTo(root.desktopId, bidirectional);
-        }
     }
 }

@@ -17,6 +17,8 @@
 #include "effect/timeline.h"
 #include "plugins/slide/springmotion.h"
 
+#include <QVector>
+
 namespace KWin
 {
 
@@ -110,6 +112,16 @@ private:
     VirtualDesktop *m_toposTo = nullptr;
     QPointF m_toposDirection;
     qreal m_toposProgress = 0;
+    QPointF m_toposOffset;
+    QPointF m_toposAnimationStartOffset;
+    QPointF m_toposAnimationEndOffset;
+    qreal m_toposAnimationStartProgress = 0;
+    qreal m_toposAnimationEndProgress = 1;
+    struct ToposPaintPlacement {
+        VirtualDesktop *desktop = nullptr;
+        QPointF position;
+    };
+    QVector<ToposPaintPlacement> m_toposPlacements;
 
     EffectWindow *m_movingWindow = nullptr;
     AnimationClock m_clock;

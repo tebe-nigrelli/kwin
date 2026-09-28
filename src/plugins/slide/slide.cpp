@@ -20,6 +20,7 @@
 // KConfigSkeleton
 #include "slideconfig.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace KWin
@@ -184,6 +185,15 @@ void SlideEffectScreen::prePaintScreen(ScreenPrePaintData &data)
         const std::chrono::milliseconds timeDelta = m_clock.tick(data.view);
         m_toposMotion.advance(timeDelta);
         m_toposProgress = m_toposMotion.position();
+        if (!m_toposPlacements.isEmpty()) {
+            const qreal range = m_toposAnimationEndProgress - m_toposAnimationStartProgress;
+            qreal factor = std::abs(range) > 0.0001
+                ? (m_toposProgress - m_toposAnimationStartProgress) / range
+                : 1.0;
+            factor = std::clamp(factor, qreal(0), qreal(1));
+            m_toposOffset = m_toposAnimationStartOffset
+                + (m_toposAnimationEndOffset - m_toposAnimationStartOffset) * factor;
+        }
         break;
     }
     case State::ActiveToposGesture:
@@ -192,11 +202,19 @@ void SlideEffectScreen::prePaintScreen(ScreenPrePaintData &data)
 
     m_paintCtx.visibleDesktops.clear();
     if (m_state == State::ActiveToposAnimation || m_state == State::ActiveToposGesture) {
-        if (m_toposFrom) {
-            m_paintCtx.visibleDesktops << m_toposFrom;
-        }
-        if (m_toposTo && m_toposTo != m_toposFrom) {
-            m_paintCtx.visibleDesktops << m_toposTo;
+        if (!m_toposPlacements.isEmpty()) {
+            for (const ToposPaintPlacement &placement : std::as_const(m_toposPlacements)) {
+                if (placement.desktop && !m_paintCtx.visibleDesktops.contains(placement.desktop)) {
+                    m_paintCtx.visibleDesktops << placement.desktop;
+                }
+            }
+        } else {
+            if (m_toposFrom) {
+                m_paintCtx.visibleDesktops << m_toposFrom;
+            }
+            if (m_toposTo && m_toposTo != m_toposFrom) {
+                m_paintCtx.visibleDesktops << m_toposTo;
+            }
         }
         data.mask |= Effect::PAINT_SCREEN_TRANSFORMED;
         return;
@@ -330,11 +348,19 @@ void SlideEffectScreen::paintWindow(const RenderTarget &renderTarget, const Rend
             }
         };
 
-        if (m_toposFrom && w->isOnDesktop(m_toposFrom)) {
-            paintCopy(-m_toposDirection * m_toposProgress);
-        }
-        if (m_toposTo && w->isOnDesktop(m_toposTo)) {
-            paintCopy(m_toposDirection * (1.0 - m_toposProgress));
+        if (!m_toposPlacements.isEmpty()) {
+            for (const ToposPaintPlacement &placement : std::as_const(m_toposPlacements)) {
+                if (placement.desktop && w->isOnDesktop(placement.desktop)) {
+                    paintCopy(placement.position - m_toposOffset);
+                }
+            }
+        } else {
+            if (m_toposFrom && w->isOnDesktop(m_toposFrom)) {
+                paintCopy(-m_toposDirection * m_toposProgress);
+            }
+            if (m_toposTo && w->isOnDesktop(m_toposTo)) {
+                paintCopy(m_toposDirection * (1.0 - m_toposProgress));
+            }
         }
         return;
     }
@@ -445,8 +471,14 @@ void SlideEffectScreen::toposTraversalChanged(const ToposTraversalVisualState &s
     m_movingWindow = nullptr;
     m_toposFrom = state.source;
     m_toposTo = state.target;
-    m_toposDirection = portVector(state.port);
+    m_toposDirection = portGridVector(state.port);
     m_toposProgress = state.progress;
+    m_toposOffset = state.offset;
+    m_toposPlacements.clear();
+    m_toposPlacements.reserve(state.placements.size());
+    for (const ToposTraversalPlacement &placement : state.placements) {
+        m_toposPlacements.append(ToposPaintPlacement{placement.desktop, placement.position});
+    }
     effects->addRepaint(m_screen->geometry());
 }
 
@@ -459,8 +491,18 @@ void SlideEffectScreen::startToposAnimation(const ToposTransitionHint &hint)
     m_movingWindow = nullptr;
     m_toposFrom = hint.from;
     m_toposTo = hint.to;
-    m_toposDirection = portVector(hint.port);
+    m_toposDirection = portGridVector(hint.port);
     m_toposProgress = hint.startProgress;
+    m_toposAnimationStartProgress = hint.startProgress;
+    m_toposAnimationEndProgress = hint.endProgress;
+    m_toposAnimationStartOffset = hint.startOffset;
+    m_toposAnimationEndOffset = hint.endOffset;
+    m_toposOffset = hint.startOffset;
+    m_toposPlacements.clear();
+    m_toposPlacements.reserve(hint.placements.size());
+    for (const ToposTraversalPlacement &placement : hint.placements) {
+        m_toposPlacements.append(ToposPaintPlacement{placement.desktop, placement.position});
+    }
     m_toposMotion.setPosition(hint.startProgress);
     m_toposMotion.setAnchor(hint.endProgress);
     m_toposMotion.setVelocity(0);
@@ -549,6 +591,12 @@ void SlideEffectScreen::finishedSwitching()
     m_toposTo = nullptr;
     m_toposDirection = QPointF();
     m_toposProgress = 0;
+    m_toposOffset = QPointF();
+    m_toposAnimationStartOffset = QPointF();
+    m_toposAnimationEndOffset = QPointF();
+    m_toposAnimationStartProgress = 0;
+    m_toposAnimationEndProgress = 1;
+    m_toposPlacements.clear();
     m_state = State::Inactive;
 }
 

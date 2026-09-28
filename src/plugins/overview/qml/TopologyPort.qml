@@ -10,28 +10,50 @@ Item {
     required property int port
     required property var edge
     property bool selected: false
-    readonly property bool hovering: hover.hovered
+    property string connectionSymbol: ""
+    property real symbolRotation: 0
+    readonly property bool hovering: mouse.containsMouse
     signal hoverStateChanged(bool hovering)
+    signal pairingStarted(point scenePosition)
+    signal pairingMoved(point scenePosition)
+    signal pairingFinished(point scenePosition)
+    signal pairingCancelled()
 
-    width: 32
-    height: 32
+    width: 48
+    height: 48
     Accessible.role: Accessible.Button
     Accessible.name: edge.portName + " topology port of " + desktopName
 
     Rectangle {
         id: dot
         anchors.centerIn: parent
-        width: 14
-        height: 14
-        radius: 7
-        color: root.edge.state === "custom" ? Kirigami.Theme.highlightColor : "transparent"
-        border.width: root.selected || root.edge.state === "custom" ? 2 : 1
+        visible: root.connectionSymbol === ""
+        width: 24
+        height: 24
+        radius: width / 2
+        color: {
+            if (root.edge.state === "blocked") {
+                return Qt.rgba(Kirigami.Theme.negativeTextColor.r,
+                               Kirigami.Theme.negativeTextColor.g,
+                               Kirigami.Theme.negativeTextColor.b, 0.22);
+            }
+            if (root.edge.exists === true) {
+                const alpha = root.edge.state === "custom" ? 0.72 : 0.42;
+                return Qt.rgba(Kirigami.Theme.highlightColor.r,
+                               Kirigami.Theme.highlightColor.g,
+                               Kirigami.Theme.highlightColor.b, alpha);
+            }
+            return Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                           Kirigami.Theme.backgroundColor.g,
+                           Kirigami.Theme.backgroundColor.b, 0.50);
+        }
+        border.width: root.selected ? 3 : 2
         border.color: root.edge.state === "blocked" ? Kirigami.Theme.negativeTextColor :
-                      (root.edge.state === "custom" ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor)
-        scale: hover.hovered ? 1.4 : 1.0
+                      (root.edge.exists === true ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor)
+        scale: mouse.containsMouse || root.selected ? 1.22 : 1.0
 
         Behavior on scale {
-            NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
         }
 
         Text {
@@ -39,29 +61,70 @@ Item {
             visible: root.edge.state === "blocked"
             text: "×"
             color: Kirigami.Theme.negativeTextColor
-            font.pixelSize: 12
+            font.pixelSize: 16
             font.bold: true
         }
 
         Rectangle {
             anchors.centerIn: parent
             visible: root.edge.bidirectional === true
-            width: parent.width + 6
-            height: parent.height + 6
+            width: parent.width + 9
+            height: parent.height + 9
             radius: width / 2
             color: "transparent"
-            border.width: 1
+            border.width: 2
             border.color: parent.border.color
         }
     }
 
-    HoverHandler {
-        id: hover
-        onHoveredChanged: root.hoverStateChanged(hovered)
+    Rectangle {
+        anchors.centerIn: parent
+        visible: root.connectionSymbol !== ""
+        width: 42
+        height: 30
+        radius: 7
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r,
+                       Kirigami.Theme.highlightColor.g,
+                       Kirigami.Theme.highlightColor.b,
+                       root.edge.exists === true ? 0.48 : 0.20)
+        border.width: root.selected ? 3 : 1
+        border.color: Kirigami.Theme.highlightColor
+        scale: mouse.containsMouse || root.selected ? 1.12 : 1.0
+
+        Text {
+            anchors.centerIn: parent
+            text: root.connectionSymbol
+            rotation: root.symbolRotation
+            color: Kirigami.Theme.textColor
+            font.pixelSize: 17
+            font.bold: true
+        }
     }
 
-    TapHandler {
+    MouseArea {
+        id: mouse
+        anchors.fill: parent
+        hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        onTapped: root.manager.selectPort(root.desktopId, root.port)
+        preventStealing: true
+
+        function scenePoint(event) {
+            return root.mapToItem(null, event.x, event.y);
+        }
+
+        onContainsMouseChanged: root.hoverStateChanged(containsMouse)
+        onPressed: (event) => root.pairingStarted(scenePoint(event))
+        onPositionChanged: (event) => {
+            if (pressed) {
+                root.pairingMoved(scenePoint(event));
+            }
+        }
+        onReleased: (event) => root.pairingFinished(scenePoint(event))
+        onCanceled: root.pairingCancelled()
+        onDoubleClicked: (event) => {
+            root.manager.unlinkPort(root.desktopId, root.port);
+            root.pairingCancelled();
+            event.accepted = true;
+        }
     }
 }
