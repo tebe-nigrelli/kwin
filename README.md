@@ -85,10 +85,15 @@ desktop-switch gestures also resolve routes through the active topology.
 ### D-Bus profile selection
 
 Topos exposes built-in and user profiles, graph state, undo, and redo through
-<code>org.kde.KWin.Topos</code>. The controller shown below is an example client
-of that API and is not part of this KWin source tree.
+<code>org.kde.KWin.Topos</code>. The companion
+[Topos Plasma applet](https://github.com/tebe-nigrelli/topos-applet-minimal) is a
+panel client for that API and is maintained in a separate repository. It can
+manage profiles and history in **Control** mode, or display the topology and
+switch desktops in **View** mode.
 
 <img src="assets/widget.png" alt="Example Topos profile and history controller">
+
+<img src="assets/widget-view.png" alt="Topos Plasma applet displaying the topology in View mode">
 
 ### Torus topology
 
