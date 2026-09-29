@@ -132,7 +132,9 @@ Item {
 
         for (let i = 0; i < desktopOverlays.count; ++i) {
             const item = desktopOverlays.itemAt(i);
-            if (!item || item.desktopId === "" || item.desktopId === manager.selectedDesktop) continue;
+            // The source is a valid target: dropping back onto it creates a
+            // self-loop for the selected port.
+            if (!item || item.desktopId === "") continue;
             const rect = item.bounds;
             if (pairingPosition.x < rect.x || pairingPosition.x > rect.x + rect.width
                     || pairingPosition.y < rect.y || pairingPosition.y > rect.y + rect.height) {

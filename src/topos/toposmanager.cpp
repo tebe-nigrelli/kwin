@@ -1992,11 +1992,13 @@ ToposTraversalVisualState ToposManager::traversalVisualState(LogicalOutput *outp
     }
 
     // Paint every directly reachable neighbor in the same stable coordinate
-    // frame. Diagonal vectors stay a full screen apart on both axes.
+    // frame. Keep self-loop targets too: painting the current desktop again at
+    // the neighboring position preloads it before that copy slides into view.
+    // Diagonal vectors stay a full screen apart on both axes.
     for (int p = 0; p < 8; ++p) {
         const ToposPort port = static_cast<ToposPort>(p);
         const ToposResolvedArc arc = resolve(it->cursor, port, m_desktops->isNavigationWrappingAround());
-        if (!arc.exists || !arc.target || arc.target == it->cursor) {
+        if (!arc.exists || !arc.target) {
             continue;
         }
         if (cornerConsensus && arc.target == cornerConsensus
