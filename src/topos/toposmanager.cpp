@@ -43,6 +43,15 @@ QString canonicalBuiltinName(const QString &name)
     if (key == QLatin1String("base grid") || key == QLatin1String("base") || key == QLatin1String("grid")) {
         return QStringLiteral("Base Grid");
     }
+    if (key == QLatin1String("point")) {
+        return QStringLiteral("Point");
+    }
+    if (key == QLatin1String("rings x") || key == QLatin1String("rings-x")) {
+        return QStringLiteral("Rings x");
+    }
+    if (key == QLatin1String("rings y") || key == QLatin1String("rings-y")) {
+        return QStringLiteral("Rings y");
+    }
     if (key == QLatin1String("torus") || key == QLatin1String("donut")) {
         return QStringLiteral("Torus");
     }
@@ -311,7 +320,7 @@ bool ToposManager::isDirty() const
 
 QStringList ToposManager::listBuiltins() const
 {
-    return {QStringLiteral("Base Grid"), QStringLiteral("Torus"), QStringLiteral("Cylinder X"), QStringLiteral("Cylinder Y"), QStringLiteral("Sphere")};
+    return {QStringLiteral("Base Grid"), QStringLiteral("Point"), QStringLiteral("Rings x"), QStringLiteral("Rings y"), QStringLiteral("Torus"), QStringLiteral("Cylinder X"), QStringLiteral("Cylinder Y"), QStringLiteral("Sphere")};
 }
 
 QStringList ToposManager::listProfiles() const
@@ -621,15 +630,14 @@ bool ToposManager::setArc(const QString &sourceSelector, ToposPort port, const Q
     }
     if (bidirectional) {
         const auto reverseIt = m_overrides.constFind(reverseEndpoint);
-        if (reverseIt != m_overrides.cend()) {
-            const bool same = reverseIt.value() && reverseIt.value()->targetDesktopId == source->id();
-            if (!same) {
-                if (error) {
-                    *error = QStringLiteral("Reverse port %1.%2 already has an explicit override")
-                                 .arg(target->name(), portName(reverseEndpoint.port));
-                }
-                return false;
+        if (reverseIt != m_overrides.cend()
+            && reverseIt.value()
+            && reverseIt.value()->targetDesktopId != source->id()) {
+            if (error) {
+                *error = QStringLiteral("Reverse port %1.%2 already has an explicit override")
+                             .arg(target->name(), portName(reverseEndpoint.port));
             }
+            return false;
         }
     }
 
@@ -1494,6 +1502,28 @@ ToposOverrideMap ToposManager::builtinOverrides(const QString &name, QString *er
     }
 
     const QList<VirtualDesktop *> desktops = m_desktops->desktops();
+    if (canonical == QLatin1String("Point")) {
+        for (VirtualDesktop *desktop : desktops) {
+            for (int port = 0; port < 8; ++port) {
+                result.insert(ToposEndpoint{desktop->id(), static_cast<ToposPort>(port)}, std::nullopt);
+            }
+        }
+        return result;
+    }
+
+    const bool ringsX = canonical == QLatin1String("Rings x");
+    const bool ringsY = canonical == QLatin1String("Rings y");
+    if (ringsX || ringsY) {
+        const QList<ToposPort> blockedPorts = ringsX
+            ? QList<ToposPort>{ToposPort::North, ToposPort::NorthEast, ToposPort::SouthEast, ToposPort::South, ToposPort::SouthWest, ToposPort::NorthWest}
+            : QList<ToposPort>{ToposPort::NorthEast, ToposPort::East, ToposPort::SouthEast, ToposPort::SouthWest, ToposPort::West, ToposPort::NorthWest};
+        for (VirtualDesktop *desktop : desktops) {
+            for (ToposPort port : blockedPorts) {
+                result.insert(ToposEndpoint{desktop->id(), port}, std::nullopt);
+            }
+        }
+    }
+
     auto addCardinalWrap = [&](VirtualDesktop *source, ToposPort port, VirtualDesktopManager::Direction direction) {
         VirtualDesktop *plain = m_desktops->basisNeighbor(source, direction, false);
         VirtualDesktop *wrapped = m_desktops->basisNeighbor(source, direction, true);
@@ -1502,17 +1532,21 @@ ToposOverrideMap ToposManager::builtinOverrides(const QString &name, QString *er
         }
     };
 
-    if (canonical == QLatin1String("Torus") || canonical == QLatin1String("Cylinder X") || canonical == QLatin1String("Sphere")) {
+    if (ringsX || canonical == QLatin1String("Torus") || canonical == QLatin1String("Cylinder X") || canonical == QLatin1String("Sphere")) {
         for (VirtualDesktop *desktop : desktops) {
             addCardinalWrap(desktop, ToposPort::East, VirtualDesktopManager::Direction::Right);
             addCardinalWrap(desktop, ToposPort::West, VirtualDesktopManager::Direction::Left);
         }
     }
-    if (canonical == QLatin1String("Torus") || canonical == QLatin1String("Cylinder Y")) {
+    if (ringsY || canonical == QLatin1String("Torus") || canonical == QLatin1String("Cylinder Y")) {
         for (VirtualDesktop *desktop : desktops) {
             addCardinalWrap(desktop, ToposPort::North, VirtualDesktopManager::Direction::Up);
             addCardinalWrap(desktop, ToposPort::South, VirtualDesktopManager::Direction::Down);
         }
+    }
+
+    if (ringsX || ringsY) {
+        return result;
     }
 
     if (canonical == QLatin1String("Sphere")) {
