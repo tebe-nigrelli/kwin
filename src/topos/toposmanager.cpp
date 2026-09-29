@@ -146,6 +146,15 @@ qreal length(const QPointF &v)
     return std::hypot(v.x(), v.y());
 }
 
+QPointF blockedOffset(const QPointF &residual, ToposPort port)
+{
+    const QPointF direction = portGridVector(port);
+    const qreal directionLengthSquared = dot(direction, direction);
+    const qreal projection = std::max<qreal>(0, dot(residual, direction) / directionLengthSquared);
+    const qreal progress = s_blockedMaximum * (1.0 - std::exp(-3.0 * projection));
+    return residual + direction * (progress - projection);
+}
+
 } // namespace
 
 ToposManager::ToposManager(VirtualDesktopManager *desktops)
@@ -1802,7 +1811,10 @@ void ToposManager::updateTraversal(const QPointF &rawDelta, LogicalOutput *outpu
     state.residual += navigationIncrement;
 
     for (int crossing = 0; crossing < s_maxCrossingsPerUpdate; ++crossing) {
-        const qreal residualLength = length(state.residual);
+        const QPointF directionalResidual = state.blocked && state.activePort
+            ? blockedOffset(state.residual, *state.activePort)
+            : state.residual;
+        const qreal residualLength = length(directionalResidual);
         if (residualLength < 0.001) {
             state.activePort.reset();
             state.segmentProgress = 0;
@@ -1811,13 +1823,17 @@ void ToposManager::updateTraversal(const QPointF &rawDelta, LogicalOutput *outpu
             break;
         }
 
-        const ToposPort candidate = graphPortForVector(state.residual, state.frame);
+        const ToposPort candidate = graphPortForVector(directionalResidual, state.frame);
         if (!state.activePort) {
             state.activePort = candidate;
         } else if (*state.activePort != candidate) {
-            const QPointF normalized = state.residual / residualLength;
+            const QPointF normalized = directionalResidual / residualLength;
             const qreal currentAlignment = dot(normalized, portVector(*state.activePort));
             if (currentAlignment < s_directionHysteresisAlignment || state.segmentProgress < 0.15) {
+                if (state.blocked) {
+                    state.residual = directionalResidual;
+                    state.blocked = false;
+                }
                 state.activePort = candidate;
             }
         }
@@ -1911,7 +1927,7 @@ ToposTraversalVisualState ToposManager::traversalVisualState(LogicalOutput *outp
 
     QPointF localOffset = it->residual;
     if (it->blocked && it->activePort) {
-        localOffset = portGridVector(*it->activePort) * visual.progress;
+        localOffset = blockedOffset(it->residual, *it->activePort);
     }
     visual.offset = cursorPosition + applyTransport(localOffset, inverseTransport(cursorFrame));
 
