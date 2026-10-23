@@ -124,7 +124,7 @@ used for those navigation paths.
 > the KWin package used by your Plasma session. Save your work and keep a
 > recovery path available.
 
-This branch targets the Plasma 6.7 KWin codebase. Installation instructions are
+This branch targets the Plasma 6.8 KWin codebase. Installation instructions are
 in the [build and recovery guide](BUILD.md). The guide currently documents the
 Arch Linux package workflow.
 

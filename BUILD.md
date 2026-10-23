@@ -5,7 +5,7 @@ DEV
         ↓ rsync
 
 BUILD SOURCE
-~/build/topos/kwin/src/kwin-6.7.5
+~/build/topos/kwin/src/kwin-6.8.1
 
         ↓ makepkg -eLsf
 
@@ -36,11 +36,11 @@ The equivalent manual build and install commands are:
 ```bash
 rsync -a --delete --exclude=.git/ --exclude=build/ --exclude=.build/ \
     /path/to/kwin/ \
-    ~/build/topos/kwin/src/kwin-6.7.5/
+    ~/build/topos/kwin/src/kwin-6.8.1/
 
 cd ~/build/topos/kwin
 makepkg -eLsf --check
-sudo pacman -U ./kwin-6.7.5-*.pkg.tar.zst
+sudo pacman -U ./kwin-6.8.1-*.pkg.tar.zst
 ```
 
 Log out of Plasma and log back in to start the installed KWin. To reload KWin
@@ -74,5 +74,5 @@ sudo pacman -U /var/cache/pacman/pkg/kwin-<version>-x86_64.pkg.tar.zst
 
 # All in One
 ```
-rsync -a     --exclude='.git/'     --exclude='.build/'     --exclude='build/'     --exclude='repo.zip'     /path/to/kwin/     ~/build/topos/kwin/src/kwin-6.7.5/ && cd ~/build/topos/kwin/ && makepkg -eLsf && sudo pacman -U ./kwin-6.7.5-*.pkg.tar.zst && kwin_wayland --replace
+rsync -a     --exclude='.git/'     --exclude='.build/'     --exclude='build/'     --exclude='repo.zip'     /path/to/kwin/     ~/build/topos/kwin/src/kwin-6.8.1/ && cd ~/build/topos/kwin/ && makepkg -eLsf && sudo pacman -U ./kwin-6.8.1-*.pkg.tar.zst && kwin_wayland --replace
 ```
