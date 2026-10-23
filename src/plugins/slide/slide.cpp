@@ -346,27 +346,32 @@ bool SlideEffectScreen::paintWindow(const RenderTarget &renderTarget, const Rend
                 data += drawTranslation;
                 const Rect screenArea = screen->geometry();
                 const Rect logicalDamage = screenArea.translated(drawTranslation).intersected(screenArea);
-                effects->paintWindow(renderTarget, viewport, w, mask,
-                                     deviceGeometry.intersected(viewport.mapToDeviceCoordinatesAligned(logicalDamage)), data);
+                if (!effects->paintWindow(renderTarget, viewport, w, mask,
+                                          deviceGeometry.intersected(viewport.mapToDeviceCoordinatesAligned(logicalDamage)), data)) {
+                    return false;
+                }
                 data += QPoint(-drawTranslation.x(), -drawTranslation.y());
             }
+            return true;
         };
 
         if (!m_toposPlacements.isEmpty()) {
             for (const ToposPaintPlacement &placement : std::as_const(m_toposPlacements)) {
                 if (placement.desktop && w->isOnDesktop(placement.desktop)) {
-                    paintCopy(placement.position - m_toposOffset);
+                    if (!paintCopy(placement.position - m_toposOffset)) {
+                        return false;
+                    }
                 }
             }
         } else {
-            if (m_toposFrom && w->isOnDesktop(m_toposFrom)) {
-                paintCopy(-m_toposDirection * m_toposProgress);
+            if (m_toposFrom && w->isOnDesktop(m_toposFrom) && !paintCopy(-m_toposDirection * m_toposProgress)) {
+                return false;
             }
-            if (m_toposTo && w->isOnDesktop(m_toposTo)) {
-                paintCopy(m_toposDirection * (1.0 - m_toposProgress));
+            if (m_toposTo && w->isOnDesktop(m_toposTo) && !paintCopy(m_toposDirection * (1.0 - m_toposProgress))) {
+                return false;
             }
         }
-        return;
+        return true;
     }
 
     const int gridWidth = effects->desktopGridWidth();
